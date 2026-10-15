@@ -27,6 +27,9 @@
   let speechIndex = 0;
   let lastVoiceAt = 0;
   let toastObserver = null;
+  let featureObserversAttached = false;
+  let lastTypingAt = 0;
+  const timerValues = new WeakMap();
   const activeIds = new Map();
 
   const clampVolume = value => {
@@ -378,8 +381,56 @@
       });
       toastObserver.observe(toastEl, { attributes: true, childList: true, characterData: true, subtree: true });
     };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", observeToast, { once: true });
-    else observeToast();
+    const observeFeaturePanels = () => {
+      if (featureObserversAttached) return;
+      featureObserversAttached = true;
+      const teachingRoot = document.getElementById("view-teaching");
+      if (teachingRoot) {
+        new MutationObserver(records => {
+          const statusNodes = new Set();
+          for (const record of records) {
+            const target = record.target?.nodeType === 1 ? record.target : record.target?.parentElement;
+            const closestStatus = target?.closest?.("#ocrStatus,#notesAiStatus,[data-ai-status],[aria-live]");
+            if (closestStatus) statusNodes.add(closestStatus);
+            for (const node of Array.from(record.addedNodes || [])) {
+              if (node.nodeType !== 1) continue;
+              if (node.matches?.("#ocrStatus,#notesAiStatus,[data-ai-status],[aria-live]")) statusNodes.add(node);
+              node.querySelectorAll?.("#ocrStatus,#notesAiStatus,[data-ai-status],[aria-live]").forEach(el => statusNodes.add(el));
+            }
+          }
+          for (const el of statusNodes) {
+            const message = (el.textContent || "").toLowerCase();
+            const kind = (el.className || "").toLowerCase();
+            if (/generating notes|extracting text|processing syllabus|writing draft|drafting notes/.test(message)) {
+              const now = Date.now();
+              if (now - lastTypingAt > 900) { lastTypingAt = now; playSound("typing-blip"); }
+            } else if (kind.includes("success") && /ai draft created|result revealed|results ready/.test(message)) {
+              playSound("tada");
+            }
+          }
+        }).observe(teachingRoot, { childList: true, characterData: true, attributes: true, subtree: true });
+      }
+      const assessmentRoot = document.getElementById("view-assessments");
+      if (assessmentRoot) {
+        new MutationObserver(() => {
+          assessmentRoot.querySelectorAll("[data-test-timer],[data-countdown],.test-timer,#testTimer").forEach(el => {
+            const value = (el.textContent || "").trim();
+            let seconds = NaN;
+            const clock = value.match(/^(\d{1,2}):(\d{2})$/);
+            const plain = value.match(/^(\d{1,3})(?:\s*s(?:ec(?:ond)?s?)?)?$/i);
+            if (clock) seconds = Number(clock[1]) * 60 + Number(clock[2]);
+            else if (plain) seconds = Number(plain[1]);
+            if (!Number.isFinite(seconds)) return;
+            const previous = timerValues.get(el);
+            timerValues.set(el, seconds);
+            if (seconds > 0 && seconds <= 10 && seconds !== previous) playSound("tick");
+          });
+        }).observe(assessmentRoot, { childList: true, characterData: true, subtree: true });
+      }
+    };
+    const afterDomReady = () => { observeToast(); observeFeaturePanels(); };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", afterDomReady, { once: true });
+    else afterDomReady();
   }
   preload();
   applyMaster();
