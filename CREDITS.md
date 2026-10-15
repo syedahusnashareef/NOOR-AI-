@@ -5,7 +5,7 @@ Ticket 07 uses the CC0-licensed **Kenney Interface Sounds** collection. The orig
 **Author:** Kenney (Kenney.nl)  
 **Source pack:** https://kenney.nl/assets/interface-sounds  
 **Source mirror / sample index:** https://github.com/GeorgeQLe/assets-sfx-ui  
-**Licence evidence:** https://github.com/GeorgeQLe/assets-sfx-ui/blob/main/LICENSES/kenney-interface-sounds.txt  
+**Licence:** CC0 1.0 as recorded in the source asset manifest; https://creativecommons.org/publicdomain/zero/1.0/  
 **Format:** OGG Vorbis; the original binary payloads are embedded as Base64 strings in the listed JavaScript bank so they can be served by a static GitHub Pages site without a binary upload step. Each original audio payload was checked to be below 60 KB before encoding.
 
 ## Per-file credits
