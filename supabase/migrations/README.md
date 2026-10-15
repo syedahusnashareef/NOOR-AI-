@@ -22,8 +22,9 @@ The existing schema was inspected before additive migrations were applied. The f
 - `membership_aware_authorization_helpers`
 - `staff_invitation_profile_completion`
 - `public_authenticated_management_rpc_wrappers`
+- `schedule_teacher_assignment_guard`
 
-The first five academic/management schema migrations were applied before the current source-parity pass; their exact SQL bodies are not yet mirrored one-to-one in this folder. The latest assessment-history and private-upload SQL files are available here. Do **not** treat this folder as a blank-project bootstrap until all earlier applied migration bodies have been checked into version control. Existing records must be kept.
+The first academic/management schema migrations were applied before the current source-parity pass; their exact SQL bodies are not yet mirrored one-to-one in this folder. The schedule teacher assignment guard is mirrored as `20261015193122_schedule_teacher_assignment_guard.sql`, with a non-destructive function rollback under `supabase/rollback/`. The latest assessment-history and private-upload SQL files are available here. Do **not** treat this folder as a blank-project bootstrap until all earlier applied migration bodies have been checked into version control. Existing records must be kept.
 
 ## Source and deployment rule
 
