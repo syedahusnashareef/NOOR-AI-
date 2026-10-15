@@ -18,7 +18,7 @@ window.NOOR_SOUND_MAP = {
     "download-done":"confirmation_002", "soft-thud":"drop_002",
     "two-note-warning":"question_001", "paper-crumple":"scratch_001",
     "soft-doorbell":"bong_001", "send-whoosh":"open_001",
-    "check-tick":"tick_002", "party-horn":"confirmation_004",
+    "check-tick":"tick_001", "party-horn":"confirmation_004",
     "card-flip":"open_002", "rising-fill":"maximize_001"
   },
   categories: [
