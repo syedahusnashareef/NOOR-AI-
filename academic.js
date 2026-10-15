@@ -326,7 +326,7 @@ async function loadStudentNotes(){
  const box=$('studentNotesList');if(!box)return;
  const x=p();if(role()!=='student'){box.innerHTML=empty('Student view only.');return;}
  let q=db().from('smart_notes').select('id,title,content,updated_at').eq('school_id',sid()).eq('status','published').eq('published_to_students',true).eq('class_id',x.class_id).order('updated_at',{ascending:false}).limit(100);
- q=x.section_id?q.eq('section_id',x.section_id):q.is('section_id',null);
+ q=x.section_id?q.or('section_id.is.null,section_id.eq.'+x.section_id):q.is('section_id',null);
  const r=await q;if(r.error){box.innerHTML=notice('studentNotesErr',err(r.error),'error');return;}
  box.innerHTML=(r.data||[]).length?(r.data||[]).map(n=>'<details class="acad-panel"><summary><b>'+E(n.title)+'</b><span class="acad-muted"> · '+E(new Date(n.updated_at).toLocaleDateString())+'</span></summary><div class="acad-notes-preview">'+outputHtml(n.content)+'</div><button class="acad-btn alt" data-noteprint="'+E(n.id)+'" type="button">Print / Save PDF</button></details>').join(''):empty('No approved notes are published for this class yet.');
  box.querySelectorAll('[data-noteprint]').forEach(b=>b.onclick=()=>window.print());
@@ -528,7 +528,7 @@ function renderView(id){
  };
  if(!funcs[id])return false;const allowed=({'teaching':['teacher'],'weekly-plan':['teacher'],'daily-report':['teacher'],'notes':['student'],'academic-monitoring':['creator','owner','principal','manager'],'student-directory':['creator','owner','principal','manager'],'teacher-directory':['creator','owner','principal','manager'],'staff-management':['creator','owner','principal','manager'],'attendance':['teacher','creator','owner','principal','manager'],'schedules':['teacher','creator','owner','principal','manager'],'meetings':['student','teacher','creator','owner','principal','manager'],'notices':['student','teacher','creator','owner','principal','manager'],'audit-logs':['creator','owner','principal','manager'],'management':['creator','owner','principal','manager']})[id]||[];
  if(!allowed.includes(role())){msg('This section is not available for your role.','error');return true;}
- const perm=({'academic-monitoring':'view_academic_reports','student-directory':'view_students','teacher-directory':'view_teacher_activity','staff-management':'manage_staff','attendance':'view_attendance','schedules':'view_teacher_activity','meetings':'manage_meetings','notices':'manage_notices','audit-logs':'view_audit_logs','management':'view_students'})[id];
+ const perm=({'academic-monitoring':'view_academic_reports','student-directory':'view_students','teacher-directory':'view_teacher_activity','staff-management':'manage_staff','attendance':'view_attendance','schedules':'view_teacher_activity','meetings':'manage_meetings','notices':'manage_notices','audit-logs':'view_audit_logs'})[id];
  if(role()==='manager'&&perm)permit(perm).then(ok=>{if(!ok){msg('Your Manager role does not have this permission.','error');return;}funcs[id]();}).catch(e=>msg(err(e),'error'));
  else funcs[id]();
  return true;
@@ -538,7 +538,8 @@ async function filterNavigation(){
  if(role()!=='manager'||!db())return;
  const r=await db().from('role_permissions').select('permission_key,is_allowed').eq('school_id',sid()).eq('role','manager'),grants=Object.fromEntries((r.data||[]).map(x=>[x.permission_key,x.is_allowed]));
  const map={'academic-monitoring':'view_academic_reports','student-directory':'view_students','teacher-directory':'view_teacher_activity','staff-management':'manage_staff','attendance':'view_attendance','schedules':'view_teacher_activity','meetings':'manage_meetings','notices':'manage_notices','audit-logs':'view_audit_logs','management':'view_students'};
- document.querySelectorAll('#mainNav button').forEach(b=>{if(map[b.dataset.view]&&!grants[map[b.dataset.view]])b.remove();});
+ const any=Object.values(grants).some(Boolean);document.querySelectorAll('#mainNav button').forEach(b=>{if(b.dataset.view==='management'&&!any)b.remove();else if(map[b.dataset.view]&&!grants[map[b.dataset.view]])b.remove();});
 }
-window.NOOR_ACADEMIC={open:renderView,filterNavigation};
+function showOwnerCodes(){const raw=sessionStorage.getItem('noor.owner.codes');if(!raw)return;let d;try{d=JSON.parse(raw);}catch{return;}sessionStorage.removeItem('noor.owner.codes');const modal=document.createElement('div');modal.className='acad-code-overlay';modal.innerHTML='<section class="acad-panel acad-code-panel"><div class="eyebrow">SCHOOL OWNER SETUP</div><h2>Save your school codes now</h2><p>The School Secret Code is shown once. Save it privately; do not use it as a password. The join code supports existing student onboarding.</p><label class="acad-label" for="ownerCodeSecret">School Secret Code</label><input id="ownerCodeSecret" readonly value="'+E(d.secret_code||'')+'"><button type="button" class="acad-btn alt" id="copyOwnerSecret">Copy secret code</button><label class="acad-label" for="ownerCodeJoin">School Join Code</label><input id="ownerCodeJoin" readonly value="'+E(d.join_code||'')+'"><button type="button" class="acad-btn alt" id="copyOwnerJoin">Copy join code</button><div class="acad-actions" style="margin-top:18px"><button type="button" class="acad-btn" id="closeOwnerCodes">I have saved these</button></div></section>';document.body.appendChild(modal);const copy=async(id)=>{try{await navigator.clipboard.writeText($(id).value);msg('Code copied. Keep it private.','success');}catch{$(id).select();msg('Select and copy the code.');}};$('copyOwnerSecret').onclick=()=>copy('ownerCodeSecret');$('copyOwnerJoin').onclick=()=>copy('ownerCodeJoin');$('closeOwnerCodes').onclick=()=>modal.remove();}
+window.NOOR_ACADEMIC={open:renderView,filterNavigation,showOwnerCodes};
 })();
