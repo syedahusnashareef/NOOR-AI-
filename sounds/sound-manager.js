@@ -26,6 +26,7 @@
   let dbReady = null;
   let speechIndex = 0;
   let lastVoiceAt = 0;
+  let cheerTimer = 0;
   let toastObserver = null;
   let featureObserversAttached = false;
   let lastTypingAt = 0;
@@ -70,6 +71,7 @@
       try { window.Howler.volume(v); window.Howler.mute(!prefs.masterSound); } catch (_) {}
     }
     if (!prefs.masterSound || v <= 0) {
+      if (cheerTimer) { window.clearTimeout(cheerTimer); cheerTimer = 0; }
       Object.values(howls).forEach(h => { try { h.stop(); } catch (_) {} });
       activeIds.clear();
       safeStopSpeech();
@@ -179,6 +181,8 @@
     const now = Date.now();
     if (!options.force && now - lastPlayedAt < DEBOUNCE_MS) return false;
     if (lastSoundName === key && now - lastPlayedAt < DEBOUNCE_MS) return false;
+    if (cheerTimer) { window.clearTimeout(cheerTimer); cheerTimer = 0; }
+    if (window.speechSynthesis?.speaking) safeStopSpeech();
     lastPlayedAt = now;
     lastSoundName = key;
     const eventMap = MAP().eventToAsset || {};
@@ -207,7 +211,14 @@
     }
     const tactileEvents = ["soft-buzz","soft-thud","two-note-warning","submit-swoosh","check-tick","sparkle","tada"];
     if (tactileEvents.includes(key)) vibrate(key === "tada" || key === "sparkle" ? [12, 22, 12] : 12);
-    if (!options.noVoice && (MAP().cheerEvents || []).includes(key)) cheer();
+    if (!options.noVoice && (MAP().cheerEvents || []).includes(key)) {
+      const clipLength = assetKey && howls[assetKey] ? (Number(howls[assetKey].duration()) || 0.22) : 0.22;
+      const wait = Math.min(1400, Math.max(260, clipLength * 1000 + 40));
+      cheerTimer = window.setTimeout(() => {
+        cheerTimer = 0;
+        if (prefs.masterSound && prefs.voiceCheers) cheer();
+      }, wait);
+    }
     return true;
   }
   function setVolume(value) {
@@ -310,6 +321,7 @@
   }
   function clearUser() {
     safeStopSpeech();
+    if (cheerTimer) { window.clearTimeout(cheerTimer); cheerTimer = 0; }
     Object.values(howls).forEach(h => { try { h.stop(); } catch (_) {} });
     userId = null;
     role = null;
