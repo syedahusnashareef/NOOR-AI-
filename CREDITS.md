@@ -51,6 +51,7 @@ Ticket 07 uses the CC0-licensed **Kenney Interface Sounds** collection. The orig
 | `bong_001.ogg` | `sounds/sound-assets-05.js` | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) · [upstream file](https://github.com/GeorgeQLe/assets-sfx-ui/blob/main/assets/kenney/interface-sounds/Audio/bong_001.ogg) | CC0 1.0 |
 | `question_001.ogg` | `sounds/sound-assets-05.js` | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) · [upstream file](https://github.com/GeorgeQLe/assets-sfx-ui/blob/main/assets/kenney/interface-sounds/Audio/question_001.ogg) | CC0 1.0 |
 | `scroll_001.ogg` | `sounds/sound-assets-05.js` | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) · [upstream file](https://github.com/GeorgeQLe/assets-sfx-ui/blob/main/assets/kenney/interface-sounds/Audio/scroll_001.ogg) | CC0 1.0 |
+| `scroll_002.ogg` | `sounds/sound-assets-05.js` | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) · [upstream file](https://github.com/GeorgeQLe/assets-sfx-ui/blob/main/assets/kenney/interface-sounds/Audio/scroll_002.ogg) | CC0 1.0 |
 | `maximize_001.ogg` | `sounds/sound-assets-05.js` | [Kenney Interface Sounds](https://kenney.nl/assets/interface-sounds) · [upstream file](https://github.com/GeorgeQLe/assets-sfx-ui/blob/main/assets/kenney/interface-sounds/Audio/maximize_001.ogg) | CC0 1.0 |
 
 ## Voice cheers and fallback
