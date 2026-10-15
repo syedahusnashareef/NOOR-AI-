@@ -1,19 +1,25 @@
-NOOR AI — Account-first school workspace
+NOOR AI — Multi-school SaaS foundation
 
-Backend project: NOOR-AI (dedicated Supabase project, India region).
+Backend project: NOOR-AI (dedicated Supabase project, Mumbai region).
 Website: https://syedahusnashareef.github.io/NOOR-AI-/
 
-Configured now:
+Verified live:
+- Supabase project is ACTIVE_HEALTHY.
 - Frontend uses this project's Supabase URL and browser-safe publishable key.
-- Student identity/profile schema, school directory, school/class/section records and teacher class assignments.
-- Row Level Security is enabled on the deployed public tables.
-- Student photo storage is private, limited to JPG/PNG/WebP files up to 3 MB.
-- Role portal selector: Student, Teacher, Headmaster, Manager and Platform Creator. The authenticated profile role is checked after sign-in.
+- Core school identity schema: profiles, schools, school directory, classes, sections, teacher class assignments and audit logs.
+- Student registration UI requests student name, login email, password, school/join code, roll number, class, section, mobile, parent/guardian name and student photo.
+- Student greeting uses the saved profile name.
+- New database tables are live for school settings, subjects, attendance sessions and records, tasks and assignees, notices, calendar/meetings, notification events and AI usage tracking.
+- RLS is enabled on the operational tables and policies were checked after migration.
+- Security advisor currently reports no findings.
 
 Not yet production-complete:
-- No Platform Creator profile or school workspaces have been provisioned yet, so the student school selector will remain empty until a trusted Creator account creates school records.
-- Staff accounts need trusted role provisioning; public student registration can never grant itself a management or Creator role.
-- Attendance, marks, AI/OCR paper generation, tasks/notices, PDF reports and real email delivery are not yet fully connected/tested end to end.
-- The first student registration and email verification flow must be tested with a real mailbox before entering real student/guardian information.
+- No trusted Platform Creator account or school workspace has been provisioned.
+- No school, teacher or student records currently exist in the database.
+- Registration/email verification/photo upload must be tested end-to-end with a real test account.
+- Staff accounts need trusted role provisioning; public signup must never grant management or Creator roles.
+- The new attendance/task/notice/calendar tables still need frontend workflows and end-to-end tests.
+- AI/OCR paper generation, marks, PDF reports and actual email delivery are not fully implemented or tested.
 
-Never put Supabase service-role keys, database passwords or AI provider secrets in this public repository. Student photos use a private bucket and access policies.
+Do not enter real student/guardian data until Creator provisioning, school setup, role isolation and save/reload tests pass.
+Never commit Supabase service-role keys, database passwords or AI/email provider secrets.
