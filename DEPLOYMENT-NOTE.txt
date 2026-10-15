@@ -1,3 +1,7 @@
-NOOR AI — Static Preview
+NOOR AI — Account-first student and school workspace
 
-This GitHub Pages branch is a visual demo only. It has no production authentication, database persistence, real email delivery, or live AI/OCR integration. Do not enter real student or guardian information.
+The old public role-switching preview pages have been removed. The site now presents student registration/sign-in and an administration workspace UI.
+
+Important: this GitHub Pages deployment is still a static client. Until a dedicated NOOR AI Supabase project is created, its migration is applied, config.js contains only that project's URL and publishable key, and auth/RLS/photo tests pass, registration and sign-in intentionally remain disabled. Do not enter real student or parent data until the secure backend has been verified.
+
+Never place service-role keys, database passwords, or AI provider secrets in this public branch.
