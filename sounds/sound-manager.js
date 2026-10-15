@@ -463,6 +463,8 @@
     playSound, setVolume, mute, unmute, setPreferences, loadUser, clearUser,
     getPreferences: () => ({ ...prefs }),
     getStatus: () => ({ userId, role, sync: supabase ? (dbReady === false ? "local-only" : "connected") : "local", audioFallback: audioFailure }),
+    getAssetStatuses: () => Object.fromEntries(Object.entries(howls).map(([key, howl]) => [key, { state: howl.state(), duration: Number(howl.duration()) || 0 }])),
+    getMappedSoundNames: () => Object.keys(MAP().eventToAsset || {}),
     onPreferencesChange: fn => { if (typeof fn === "function") { listeners.add(fn); return () => listeners.delete(fn); } return () => {}; },
     vibrate, cheer, previewVoice,
     unlock
