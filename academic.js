@@ -500,7 +500,7 @@ async function renderEvents(isNotice){
 async function saveEvent(e,isNotice){
  e.preventDefault();try{const title=val('eventTitle'),body=val('eventBody');if(!title||!body)throw new Error('Enter title and details.');
  const start=new Date(val('eventStart')).toISOString(),end=val('eventEnd')?new Date(val('eventEnd')).toISOString():null;
- const q=isNotice?await db().from('school_notices').insert({school_id:sid(),created_by:u().id,title,body,target_roles:[val('eventRole')||'student'],starts_at:start,ends_at:end,is_active:true}):await db().from('calendar_events').insert({school_id:sid(),created_by:u().id,title,description:body,event_type:val('eventType')||'meeting',starts_at:start,ends_at:end,location:val('eventLocation')||null});
+ const q=isNotice?await db().from('school_notices').insert({school_id:sid(),created_by:u().id,title,body,target_roles:[val('eventRole')||'student'],starts_at:start,ends_at:end,is_active:true}):await db().from('calendar_events').insert({school_id:sid(),created_by:u().id,title,description:body,event_type:val('eventType')||'meeting',starts_at:start,ends_at:end,location:val('eventLocation')||null,target_roles:['principal','manager','teacher','student']});
  if(q.error)throw q.error;status('eventStatus','Record saved to database. Email delivery has not been claimed.','success');await loadEvents(isNotice);
  }catch(e){status('eventStatus',err(e),'error');}
 }
