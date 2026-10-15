@@ -1,7 +1,19 @@
-NOOR AI — Account-first student and school workspace
+NOOR AI — Account-first school workspace
 
-The old public role-switching preview pages have been removed. The site now presents student registration/sign-in and an administration workspace UI.
+Backend project: NOOR-AI (dedicated Supabase project, India region).
+Website: https://syedahusnashareef.github.io/NOOR-AI-/
 
-Important: this GitHub Pages deployment is still a static client. Until a dedicated NOOR AI Supabase project is created, its migration is applied, config.js contains only that project's URL and publishable key, and auth/RLS/photo tests pass, registration and sign-in intentionally remain disabled. Do not enter real student or parent data until the secure backend has been verified.
+Configured now:
+- Frontend uses this project's Supabase URL and browser-safe publishable key.
+- Student identity/profile schema, school directory, school/class/section records and teacher class assignments.
+- Row Level Security is enabled on the deployed public tables.
+- Student photo storage is private, limited to JPG/PNG/WebP files up to 3 MB.
+- Role portal selector: Student, Teacher, Headmaster, Manager and Platform Creator. The authenticated profile role is checked after sign-in.
 
-Never place service-role keys, database passwords, or AI provider secrets in this public branch.
+Not yet production-complete:
+- No Platform Creator profile or school workspaces have been provisioned yet, so the student school selector will remain empty until a trusted Creator account creates school records.
+- Staff accounts need trusted role provisioning; public student registration can never grant itself a management or Creator role.
+- Attendance, marks, AI/OCR paper generation, tasks/notices, PDF reports and real email delivery are not yet fully connected/tested end to end.
+- The first student registration and email verification flow must be tested with a real mailbox before entering real student/guardian information.
+
+Never put Supabase service-role keys, database passwords or AI provider secrets in this public repository. Student photos use a private bucket and access policies.
