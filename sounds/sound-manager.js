@@ -177,7 +177,10 @@
   }
   function playSound(name, options = {}) {
     const key = String(name || "").trim().toLowerCase();
-    if (!key || (!options.force && !prefs.masterSound) || prefs.volume <= 0) return false;
+    if (!key) return false;
+    const tactileEvents = ["soft-buzz","soft-thud","two-note-warning","submit-swoosh","check-tick","sparkle","tada"];
+    if (tactileEvents.includes(key)) vibrate(key === "tada" || key === "sparkle" ? [12, 22, 12] : 12);
+    if ((!options.force && !prefs.masterSound) || prefs.volume <= 0) return false;
     const now = Date.now();
     if (!options.force && now - lastPlayedAt < DEBOUNCE_MS) return false;
     if (lastSoundName === key && now - lastPlayedAt < DEBOUNCE_MS) return false;
@@ -209,8 +212,6 @@
     } else {
       synthFallback(key);
     }
-    const tactileEvents = ["soft-buzz","soft-thud","two-note-warning","submit-swoosh","check-tick","sparkle","tada"];
-    if (tactileEvents.includes(key)) vibrate(key === "tada" || key === "sparkle" ? [12, 22, 12] : 12);
     if (!options.noVoice && (MAP().cheerEvents || []).includes(key)) {
       const clipLength = assetKey && howls[assetKey] ? (Number(howls[assetKey].duration()) || 0.22) : 0.22;
       const wait = Math.min(1400, Math.max(260, clipLength * 1000 + 40));
