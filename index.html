@@ -197,6 +197,19 @@ window.NOOR_AI_APP={get db(){return supabaseClient;},get profile(){return curren
 <script src="./academic.js"></script>
 <script src="./academic-extras.js"></script>
 
+
+<!-- Always-visible fallback: the sound buttons remain visible even if app scripts fail. -->
+<style>
+#noorSoundQuickControl{position:fixed!important;right:12px!important;bottom:12px!important;z-index:2147483647!important;display:flex!important;gap:7px!important;align-items:center!important;padding:7px!important;background:#321323!important;border:2px solid #d6b174!important;border-radius:999px!important;box-shadow:0 8px 28px #24101d55!important}
+#noorSoundQuickControl button{display:block!important;visibility:visible!important;opacity:1!important;border:1px solid #ffffff40!important;border-radius:999px!important;padding:11px 13px!important;background:#54243b!important;color:#fff8f5!important;font:700 12px/1.2 system-ui,sans-serif!important;cursor:pointer!important;white-space:nowrap!important}
+#noorSoundQuickControl #noorSoundQuickTest{background:#f0d39f!important;color:#321323!important}
+@media(max-width:480px){#noorSoundQuickControl{right:8px!important;bottom:8px!important;gap:5px!important;padding:5px!important}#noorSoundQuickControl button{padding:10px!important;font-size:11px!important}}
+</style>
+<div id="noorSoundQuickControl" aria-label="NOOR AI sound controls">
+<button type="button" id="noorSoundQuickToggle" aria-pressed="true">🔊 Sound ON</button>
+<button type="button" id="noorSoundQuickTest">Test sound</button>
+</div>
+
 <script>
 /* Guaranteed in-page NOOR AI sound control; independent of the Settings panel. */
 (function(){
@@ -206,7 +219,7 @@ window.NOOR_AI_APP={get db(){return supabaseClient;},get profile(){return curren
     const style=document.createElement('style');
     style.textContent='#noorSoundQuickControl{position:fixed!important;right:12px!important;bottom:12px!important;z-index:2147483647!important;display:flex!important;gap:7px!important;align-items:center!important;padding:7px!important;background:#321323!important;border:2px solid #d6b174!important;border-radius:999px!important;box-shadow:0 8px 28px #24101d55!important}#noorSoundQuickControl button{display:block!important;visibility:visible!important;opacity:1!important;border:1px solid #ffffff40!important;border-radius:999px!important;padding:11px 13px!important;background:#54243b!important;color:#fff8f5!important;font:700 12px/1.2 system-ui,sans-serif!important;cursor:pointer!important;white-space:nowrap!important}#noorSoundQuickControl #noorSoundQuickTest{background:#f0d39f!important;color:#321323!important}@media(max-width:480px){#noorSoundQuickControl{right:8px!important;bottom:8px!important;gap:5px!important;padding:5px!important}#noorSoundQuickControl button{padding:10px!important;font-size:11px!important}}';
     document.head.appendChild(style);
-    const wrap=document.createElement('div');wrap.id='noorSoundQuickControl';wrap.innerHTML='<button type="button" id="noorSoundQuickToggle">🔊 Sound ON</button><button type="button" id="noorSoundQuickTest">Test sound</button>';document.body.appendChild(wrap);
+    let wrap=document.getElementById('noorSoundQuickControl');if(!wrap){wrap=document.createElement('div');wrap.id='noorSoundQuickControl';wrap.innerHTML='<button type="button" id="noorSoundQuickToggle">🔊 Sound ON</button><button type="button" id="noorSoundQuickTest">Test sound</button>';document.body.appendChild(wrap);}
     const toggle=wrap.querySelector('#noorSoundQuickToggle'),test=wrap.querySelector('#noorSoundQuickTest');
     const sound=()=>window.NOOR_SOUND;
     function reflect(p){const on=p?.masterSound!==false;toggle.textContent=on?'🔊 Sound ON':'🔇 Sound OFF';toggle.setAttribute('aria-pressed',String(on));}
