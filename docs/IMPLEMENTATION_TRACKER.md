@@ -119,3 +119,37 @@ Tables added/extended include academic years, syllabus units and progress, smart
 - Migration-source parity is still being backfilled: the latest assessment and private-upload SQL is checked into `supabase/migrations/`, but the first live schema migrations still need their exact source bodies mirrored before a fresh-project bootstrap is reproducible. See `supabase/migrations/README.md` and the non-destructive rollback guidance.
 
 **Status: implemented foundation, not final production acceptance.** Never treat generated notes as approved until a teacher reviews them; never treat an unreported class as zero teaching activity or syllabus percentage as proof of student learning.
+
+
+## Task 5 + Task 6 patch verification — 16 October 2026
+
+This section records the latest concrete follow-up changes. The production-facing site remains a working foundation until authenticated end-to-end acceptance tests can run.
+
+### Latest frontend changes
+- [x] Fixed pre-existing JavaScript parse errors in teacher directory/profile rendering; academic.js now passes a JavaScript syntax parse check.
+- [x] Smart Notes and weekly-plan generated output now have editable text areas; teacher edits are stored in the existing JSONB note/plan records and restored when reopening them.
+- [x] Teacher subject choices now respond to class/section and are filtered against active teacher assignments.
+- [x] Academic Monitoring now filters by academic year and reports active teacher count, report-submission coverage, records/classes/subjects in scope, and reported issues. No-submission count is shown only when the filters allow a meaningful school-wide comparison.
+- [x] Monthly saved-report trends are shown from actual dated report records; syllabus units are deduplicated by curriculum-unit ID in the summary.
+- [x] CSV exports include readable school/year/teacher/class/section/subject labels and teaching fields.
+- [x] Management schedule creation now targets an explicitly selected active teacher with a matching active class/section/subject assignment.
+- [x] Teacher directory search includes saved school-membership username and employee ID fields where present.
+- [x] Workspace entry now checks an existing school membership's status and role; an inactive/removed membership is refused, while historical data is preserved.
+- [x] These existing-app changes were synced to the GitHub Pages branch.
+
+### Latest database / AI changes
+- [x] Applied schedule_teacher_assignment_guard to the existing NOOR AI Supabase project. The shared academic-context trigger now also verifies active teacher assignment when inserting/updating a regular schedule or extra-class record.
+- [x] Checked in the applied schedule guard SQL and a non-destructive rollback function under supabase/migrations/ and supabase/rollback/.
+- [x] Redeployed noor-ai-academic-assistant as version 2 with JWT verification still enabled; Smart Notes usage is now logged under smart_notes instead of the generic other feature bucket.
+- [x] Re-ran the Supabase Security Advisor after the database policy/function changes; it returned no findings at the time of the check.
+
+### Checks completed vs. remaining
+- [x] JavaScript syntax parse check for the current academic.js.
+- [x] Read-back of schema/trigger/function state after applying the schedule assignment migration.
+- [x] Confirmed the schedule database trigger rejects a future schedule write unless the teacher has an active matching assignment (guard installed; no seeded records were available for a positive/negative insert test).
+- [ ] Run authenticated positive and negative workflow tests with real, separate Owner, Principal/Manager, Teacher and Student accounts across two test schools.
+- [ ] Test upload/OCR/AI generation, server autosave, submit, review/return/resubmit, PDF print and CSV downloads with populated school/class/subject records.
+- [ ] Verify the configured server AI key is present and real provider calls succeed. The Edge Function is deployed, but a valid AI_PROVIDER_API_KEY and provider usage have not been confirmed.
+- [ ] Complete full migration-source parity and a clean-database replay. Earlier schema/management migrations still need their exact original SQL mirrored one-to-one; this live project must not be treated as a fully reproducible blank-project bootstrap yet.
+
+**Status remains: implemented and deployed improvements, not final production acceptance.** The application still has no provisioned school/teacher/student data in this project. Browser print/save-as-PDF is used; a server-rendered PDF and native XLSX export are not implemented. OCR supports image uploads only (JPG/PNG/WebP), and email notifications are queued/in-app records until an email provider is configured and delivery is verified.
