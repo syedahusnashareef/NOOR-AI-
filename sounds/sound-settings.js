@@ -4,7 +4,7 @@
   const esc = value => String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   function markup() {
     const cats = window.NOOR_SOUND_MAP?.categories || [];
-    return \`
+    return `
       <section class="panel sound-feel-panel" id="soundFeelPanel" aria-labelledby="soundFeelTitle">
         <div class="sound-feel-head">
           <div><div class="eyebrow">Personal experience</div><h2 id="soundFeelTitle">Sound &amp; Feel</h2>
@@ -25,10 +25,10 @@
         </div>
         <div class="sound-preview-head"><div><h3>Sound categories</h3><p>Preview each family. Preview buttons never play more than one sound at a time.</p></div></div>
         <div class="sound-category-grid">
-          \${cats.map(cat => \`<article class="sound-category-card"><div class="sound-category-icon" aria-hidden="true">\${({interaction:"✧",navigation:"↗",learning:"✎",assessment:"✓",achievement:"✦",messages:"◇",voice:"♫",haptics:"⌁"})[cat.id] || "♫"}</div><div class="sound-category-copy"><b>\${esc(cat.title)}</b><small>\${esc(cat.description)}</small></div><button type="button" class="btn soft sound-preview-btn" data-sound-preview="\${esc(cat.preview)}">Preview</button></article>\`).join("")}
+          ${cats.map(cat => `<article class="sound-category-card"><div class="sound-category-icon" aria-hidden="true">${({interaction:"✧",navigation:"↗",learning:"✎",assessment:"✓",achievement:"✦",messages:"◇",voice:"♫",haptics:"⌁"})[cat.id] || "♫"}</div><div class="sound-category-copy"><b>${esc(cat.title)}</b><small>${esc(cat.description)}</small></div><button type="button" class="btn soft sound-preview-btn" data-sound-preview="${esc(cat.preview)}">Preview</button></article>`).join("")}
         </div>
         <p class="sound-note">Sounds stay muted if Master Sound is OFF. Browser or device audio restrictions are handled quietly; the rest of the workspace continues normally.</p>
-      </section>\`;
+      </section>`;
   }
   function mount(root) {
     if (!root || root.dataset.mounted === "true") return;
