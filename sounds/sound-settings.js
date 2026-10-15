@@ -77,45 +77,10 @@
     }));
     manager()?.onPreferencesChange?.(reflect);
   }
+  // The quick control is static in index.html so it remains visible if app scripts fail.
+  // Its styling and event handlers live in index.html only; do not inject a duplicate.
   function mountQuickControl() {
-    if (document.getElementById("noorSoundQuickControl")) return;
-    const style = document.createElement("style");
-    style.id = "noorSoundQuickControlStyle";
-    style.textContent = `
-      #noorSoundQuickControl{position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;gap:7px;align-items:center;padding:7px;background:rgba(48,25,38,.96);border:1px solid #d6b174;border-radius:999px;box-shadow:0 8px 28px #24101d35;backdrop-filter:blur(12px)}
-      #noorSoundQuickControl button{border:1px solid #ffffff28;border-radius:999px;padding:10px 13px;background:#ffffff12;color:#fff8f5;font:700 12px/1.1 system-ui,sans-serif;cursor:pointer;white-space:nowrap}
-      #noorSoundQuickControl button:focus-visible{outline:2px solid #f0d39f;outline-offset:2px}
-      #noorSoundQuickControl #noorSoundQuickTest{background:#f0d39f;color:#321323;border-color:#f0d39f}
-      @media(max-width:480px){#noorSoundQuickControl{right:10px;bottom:10px;padding:5px;gap:5px}#noorSoundQuickControl button{padding:10px 11px;font-size:11px}}
-    `;
-    document.head.appendChild(style);
-    const wrap = document.createElement("div");
-    wrap.id = "noorSoundQuickControl";
-    wrap.setAttribute("aria-label", "NOOR AI sound controls");
-    wrap.innerHTML = '<button type="button" id="noorSoundQuickToggle" aria-pressed="true">🔊 Sound ON</button><button type="button" id="noorSoundQuickTest">Test sound</button>';
-    document.body.appendChild(wrap);
-    const toggle = wrap.querySelector("#noorSoundQuickToggle");
-    const test = wrap.querySelector("#noorSoundQuickTest");
-    const api = () => window.NOOR_SOUND;
-    const reflectQuick = values => {
-      const enabled = values?.masterSound !== false;
-      toggle.textContent = enabled ? "🔊 Sound ON" : "🔇 Sound OFF";
-      toggle.setAttribute("aria-pressed", String(enabled));
-    };
-    reflectQuick(api()?.getPreferences?.() || {masterSound:true});
-    toggle.addEventListener("click", () => {
-      const current = api()?.getPreferences?.() || {masterSound:true};
-      const next = !current.masterSound;
-      api()?.setPreferences?.({masterSound:next});
-      if (next) api()?.playSound?.("soft-chime", {force:true,noVoice:true});
-    });
-    test.addEventListener("click", () => {
-      const current = api()?.getPreferences?.() || {masterSound:true};
-      if (!current.masterSound) api()?.setPreferences?.({masterSound:true});
-      api()?.playSound?.("ding", {force:true,noVoice:true});
-    });
-    api()?.onPreferencesChange?.(reflectQuick);
-    window.addEventListener("noor:sound-preferences", event => reflectQuick(event.detail));
+    return !!document.getElementById("noorSoundQuickControl");
   }
   window.NOOR_SOUND_SETTINGS = { markup, mount, mountQuickControl };
   if (document.readyState === "loading") {
