@@ -350,17 +350,21 @@ async function reportSummary(reports){
   const ures=await uq;if(ures.error){box.innerHTML=notice('summaryUnitsError',err(ures.error),'error');return;}units=ures.data||[];
   let pq=db().from('syllabus_progress').select('syllabus_unit_id,progress_status,teacher_reported_percentage').eq('school_id',sid()).eq('academic_year_id',selectedYear);
   if(val('monClass'))pq=pq.eq('class_id',val('monClass'));
-  if(val('monSection'))pq=pq.eq('section_id',val('monSection'));
+  if(val('monSection'))pq=pq.or('section_id.is.null,section_id.eq.'+val('monSection'));
   if(val('monSubject'))pq=pq.eq('subject_id',val('monSubject'));
   const pres=await pq;if(pres.error){box.innerHTML=notice('summaryProgressError',err(pres.error),'error');return;}progress=pres.data||[];
  }
- const bestStatus=new Map(),rank={not_started:1,in_progress:2,requires_revision:3,completed:4};
- progress.forEach(x=>{const old=bestStatus.get(x.syllabus_unit_id);if(!old||(rank[x.progress_status]||0)>(rank[old.progress_status]||0))bestStatus.set(x.syllabus_unit_id,x);});
+ const unitIds=new Set(units.map(x=>x.id)),bestStatus=new Map(),rank={not_started:1,in_progress:2,completed:3,requires_revision:4};
+ progress.filter(x=>unitIds.has(x.syllabus_unit_id)).forEach(x=>{const old=bestStatus.get(x.syllabus_unit_id);if(!old||(rank[x.progress_status]||0)>(rank[old.progress_status]||0))bestStatus.set(x.syllabus_unit_id,x);});
  const completed=[...bestStatus.values()].filter(x=>x.progress_status==='completed').length;
  const inProgress=[...bestStatus.values()].filter(x=>x.progress_status==='in_progress').length;
  const revision=[...bestStatus.values()].filter(x=>x.progress_status==='requires_revision').length;
  const pct=reports.filter(x=>x.teacher_reported_percentage!=null),avg=pct.length?(pct.reduce((s,x)=>s+Number(x.teacher_reported_percentage),0)/pct.length).toFixed(1)+'%':'Not reported';
  const submitted=reports.filter(x=>['submitted','reviewed','returned'].includes(x.report_status));
+ const monthly=new Map();
+ reports.forEach(r=>{const key=String(r.report_date||'').slice(0,7);if(!key)return;let m=monthly.get(key);if(!m){m={month:key,submitted:0,teachers:new Set(),percentages:[]};monthly.set(key,m);}if(['submitted','reviewed','returned'].includes(r.report_status)){m.submitted++;m.teachers.add(r.teacher_id);}if(r.teacher_reported_percentage!=null)m.percentages.push(Number(r.teacher_reported_percentage));});
+ const trendRows=[...monthly.values()].sort((a,b)=>a.month.localeCompare(b.month)).map(m=>'<tr><td>'+E(m.month)+'</td><td>'+E(m.submitted)+'</td><td>'+E(m.teachers.size)+'</td><td>'+E(m.percentages.length?(m.percentages.reduce((s,v)=>s+v,0)/m.percentages.length).toFixed(1)+'%':'Not reported')+'</td></tr>');
+ const monthlyHtml=trendRows.length?table(['Month','Submitted reports','Teachers submitting','Mean teacher-reported coverage'],trendRows):empty('No saved reports for the selected period.');
  const metrics=[
   ['Submitted / reviewed / returned reports',submitted.length],
   ['Draft reports',reports.filter(x=>x.report_status==='draft').length],
@@ -374,7 +378,7 @@ async function reportSummary(reports){
   ['Reports with issues',reports.filter(x=>x.difficulties?.trim()).length],
   ['Mean teacher-reported coverage',avg]
  ];
- box.innerHTML='<h3>Academic reporting summary</h3><div class="acad-grid three">'+metrics.map(([a,b])=>'<div class="acad-metric"><strong style="font-size:20px">'+E(b)+'</strong><span>'+E(a)+'</span></div>').join('')+'</div><p class="acad-muted">Period: '+E(val('monFrom')||'start of records')+' to '+E(val('monTo')||today())+'. Syllabus metrics use '+E(state.years.find(x=>x.id===selectedYear)?.label||'the selected academic year')+'. Topics are counted once by curriculum-unit ID; progress is an academic monitoring indicator, not proof of learning quality. Teacher percentages remain self-reported unless independently verified.</p>';
+ box.innerHTML='<h3>Academic reporting summary</h3><div class="acad-grid three">'+metrics.map(([a,b])=>'<div class="acad-metric"><strong style="font-size:20px">'+E(b)+'</strong><span>'+E(a)+'</span></div>').join('')+'</div><h3 style="margin-top:20px">Monthly coverage trend</h3>'+monthlyHtml+'<p class="acad-muted">Period: '+E(val('monFrom')||'start of records')+' to '+E(val('monTo')||today())+'. Syllabus metrics use '+E(state.years.find(x=>x.id===selectedYear)?.label||'the selected academic year')+'. Topics are counted once by curriculum-unit ID; progress is an academic monitoring indicator, not proof of learning quality. Teacher percentages remain self-reported unless independently verified.</p>';
 }
 async function saveYear(e){
  e.preventDefault();try{if(!(await permit('manage_syllabus')))throw new Error('Your role cannot manage academic years.');
