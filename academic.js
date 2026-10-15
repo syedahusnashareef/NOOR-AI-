@@ -85,10 +85,31 @@ function outputHtml(o){
  return h||'<pre>'+E(JSON.stringify(o,null,2))+'</pre>';
 }
 async function imageData(inputId){
- const files=Array.from($(inputId)?.files||[]);if(files.length>8)throw new Error('Choose up to 8 syllabus images.');let total=0,out=[];
- for(const f of files){if(!/^image\/(jpeg|png|webp)$/.test(f.type))throw new Error('Only JPG, PNG and WebP images are currently supported.');if(f.size>4*1024*1024)throw new Error('Each image must be under 4 MB.');total+=f.size;if(total>12*1024*1024)throw new Error('Keep all selected images under 12 MB total.');
-  out.push(await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result));r.onerror=()=>no(new Error('Could not read an image.'));r.readAsDataURL(f);}));
- }return out;
+ const files=Array.from($(inputId)?.files||[]);
+ if(files.length>8)throw new Error('Choose up to 8 syllabus images.');
+ let total=0;
+ for(const f of files){
+  if(!/^image\/(jpeg|png|webp)$/.test(f.type))throw new Error('Only JPG, PNG and WebP images are currently supported.');
+  if(f.size>4*1024*1024)throw new Error('Each image must be under 4 MB.');
+  total+=f.size;if(total>12*1024*1024)throw new Error('Keep all selected images under 12 MB total.');
+ }
+ if(!files.length)return [];
+ const c=context(val('acadTopic'));
+ if(!c.school_id||!c.academic_year_id||!c.class_id||!c.subject_id)throw new Error('Choose academic year, class and subject before uploading images.');
+ state.sourceFileIds=[];state.sourceUploadPaths=[];
+ const out=[];
+ for(const f of files){
+  const dataUrl=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result));r.onerror=()=>no(new Error('Could not read an image.'));r.readAsDataURL(f);});
+  const safe=f.name.replace(/[^A-Za-z0-9._-]/g,'_').slice(-120);
+  const path=c.school_id+'/'+u().id+'/'+crypto.randomUUID()+'-'+safe;
+  const up=await db().storage.from('noor-syllabus-source').upload(path,f,{contentType:f.type,upsert:false});
+  if(up.error)throw new Error('Private syllabus upload failed: '+up.error.message);
+  const row={school_id:c.school_id,academic_year_id:c.academic_year_id,uploaded_by:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,unit_id:c.unit_id,storage_path:path,original_file_name:f.name.slice(0,255),mime_type:f.type,file_size_bytes:f.size,extraction_confidence:'not_run'};
+  const meta=await db().from('syllabus_uploads').insert(row).select('id').single();
+  if(meta.error){await db().storage.from('noor-syllabus-source').remove([path]);throw new Error('Could not register uploaded source page: '+meta.error.message);}
+  state.sourceFileIds.push(meta.data.id);state.sourceUploadPaths.push(path);out.push(dataUrl);
+ }
+ return out;
 }
 function renderTeaching(){
  const body='<div class="acad-grid"><section class="acad-panel"><h3>AI Smart Notes Generator</h3><p>Enter a few rough points or upload multiple syllabus photographs. OCR output is editable and AI notes remain a draft until teacher approval.</p><form id="notesForm" class="acad-form">'+contextHtml()+
@@ -126,9 +147,9 @@ async function saveNotes(publish){
  try{
  if(!state.lastAI||!state.noteContext)throw new Error('Generate notes first.');
  if(publish&&!confirm('Publish this reviewed note to the selected class / section?'))return;
- const c=state.noteContext,row={school_id:c.school_id,academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,unit_id:c.unit_id,title:String(state.lastAI.title||c.topic).slice(0,240),source_text:val('roughNotes'),extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run',content:state.lastAI,status:publish?'published':'draft',published_to_students:!!publish,published_at:publish?new Date().toISOString():null,created_by:u().id,updated_by:u().id};
+ const c=state.noteContext,row={school_id:c.school_id,academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,unit_id:c.unit_id,title:String(state.lastAI.title||c.topic).slice(0,240),source_text:val('roughNotes'),extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run',source_file_ids:state.sourceFileIds||[],content:state.lastAI,status:publish?'published':'draft',published_to_students:!!publish,published_at:publish?new Date().toISOString():null,created_by:u().id,updated_by:u().id};
  let r=state.editNoteId?await db().from('smart_notes').update(row).eq('id',state.editNoteId).select('id').single():await db().from('smart_notes').insert(row).select('id').single();
- if(r.error)throw r.error;state.editNoteId=r.data.id;msg(publish?'Reviewed notes published.':'Draft saved to the database.','success');await loadMyNotes();
+ if(r.error)throw r.error;state.editNoteId=r.data.id;if(state.sourceFileIds?.length){const attach=await db().from('syllabus_uploads').update({note_id:r.data.id,extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run'}).in('id',state.sourceFileIds);if(attach.error)throw attach.error;}msg(publish?'Reviewed notes published.':'Draft saved to the database.','success');await loadMyNotes();
  }catch(e){msg(err(e),'error');}
 }
 async function createUnit(e){
@@ -158,15 +179,25 @@ async function renderUnits(){
  box.querySelectorAll('[data-saveprog]').forEach(b=>b.onclick=async()=>{try{const x=rows.find(i=>i.id===b.dataset.saveprog);await saveProgress(x,box.querySelector('[data-prog="'+x.id+'"]').value,null);await loadContext();await renderUnits();msg('Progress saved without adding a duplicate record.','success');}catch(e){msg(err(e),'error');}});
 }
 async function loadMyNotes(){
- const box=$('myNotesList');if(!box)return;let q=db().from('smart_notes').select('id,title,status,published_to_students,updated_at,content').eq('school_id',sid()).order('updated_at',{ascending:false}).limit(40);
+ const box=$('myNotesList');if(!box)return;let q=db().from('smart_notes').select('id,title,status,published_to_students,updated_at,content,source_file_ids').eq('school_id',sid()).order('updated_at',{ascending:false}).limit(40);
  if(role()==='teacher')q=q.eq('teacher_id',u().id);
  const r=await q;if(r.error){box.innerHTML=notice('noteLoadError',err(r.error),'error');return;}state.notes=r.data||[];
- box.innerHTML=state.notes.length?state.notes.map(x=>'<div style="padding:10px 0;border-bottom:1px solid var(--line)"><b>'+E(x.title)+'</b><div class="acad-muted">'+E(x.status)+' · '+E(new Date(x.updated_at).toLocaleDateString())+'</div><button class="acad-btn alt" type="button" data-opennote="'+E(x.id)+'">Open</button></div>').join(''):empty('No saved notes yet.');
+ box.innerHTML=state.notes.length?state.notes.map(x=>'<div style="padding:10px 0;border-bottom:1px solid var(--line)"><b>'+E(x.title)+'</b><div class="acad-muted">'+E(x.status)+' · '+E(new Date(x.updated_at).toLocaleDateString())+'</div><button class="acad-btn alt" type="button" data-opennote="'+E(x.id)+'">Open</button>'+(x.source_file_ids?.length?' <button class="acad-btn alt" type="button" data-sources="'+E(x.id)+'">View source pages ('+x.source_file_ids.length+')</button><div id="sources-'+E(x.id)+'"></div>':'')+'</div>').join(''):empty('No saved notes yet.');
  box.querySelectorAll('[data-opennote]').forEach(b=>b.onclick=()=>openNote(b.dataset.opennote));
+ box.querySelectorAll('[data-sources]').forEach(b=>b.onclick=()=>loadSourceLinks(b.dataset.sources));
+}
+async function loadSourceLinks(noteId){
+ const box=$('sources-'+noteId);if(!box)return;
+ const n=state.notes.find(x=>x.id===noteId);if(!n?.source_file_ids?.length){box.innerHTML=empty('No linked source pages.');return;}
+ const r=await db().from('syllabus_uploads').select('id,storage_path,original_file_name').in('id',n.source_file_ids);
+ if(r.error){box.innerHTML=notice('sourceLinkError',err(r.error),'error');return;}
+ const links=[];
+ for(const x of (r.data||[])){const s=await db().storage.from('noor-syllabus-source').createSignedUrl(x.storage_path,300);if(!s.error&&s.data?.signedUrl)links.push('<a href="'+E(s.data.signedUrl)+'" target="_blank" rel="noopener noreferrer">'+E(x.original_file_name)+'</a>');}
+ box.innerHTML=links.length?'<div class="acad-source-links">'+links.join('<br>')+'</div>':empty('Source links could not be created for your role.');
 }
 async function openNote(id){
  const r=await db().from('smart_notes').select('*').eq('id',id).single();if(r.error){msg(err(r.error),'error');return;}
- const x=r.data;state.editNoteId=id;state.lastAI=x.content;state.noteContext={school_id:x.school_id,academic_year_id:x.academic_year_id,class_id:x.class_id,section_id:x.section_id,subject_id:x.subject_id,unit_id:x.unit_id,topic:x.title};
+ const x=r.data;state.editNoteId=id;state.sourceFileIds=x.source_file_ids||[];state.lastAI=x.content;state.noteContext={school_id:x.school_id,academic_year_id:x.academic_year_id,class_id:x.class_id,section_id:x.section_id,subject_id:x.subject_id,unit_id:x.unit_id,topic:x.title};
  [['acadYear',x.academic_year_id],['acadClass',x.class_id],['acadSection',x.section_id||''],['acadSubject',x.subject_id],['acadUnit',x.unit_id||''],['acadTopic',x.title],['roughNotes',x.source_text],['reviewedSyllabusText',x.extracted_text]].forEach(([k,v])=>{if($(k))$(k).value=v||'';});
  $('notesOutput').innerHTML=outputHtml(x.content);msg('Saved note loaded. Review before approving or publishing.','success');
 }
