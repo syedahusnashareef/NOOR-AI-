@@ -350,17 +350,21 @@ async function reportSummary(reports){
   const ures=await uq;if(ures.error){box.innerHTML=notice('summaryUnitsError',err(ures.error),'error');return;}units=ures.data||[];
   let pq=db().from('syllabus_progress').select('syllabus_unit_id,progress_status,teacher_reported_percentage').eq('school_id',sid()).eq('academic_year_id',selectedYear);
   if(val('monClass'))pq=pq.eq('class_id',val('monClass'));
-  if(val('monSection'))pq=pq.eq('section_id',val('monSection'));
+  if(val('monSection'))pq=pq.or('section_id.is.null,section_id.eq.'+val('monSection'));
   if(val('monSubject'))pq=pq.eq('subject_id',val('monSubject'));
   const pres=await pq;if(pres.error){box.innerHTML=notice('summaryProgressError',err(pres.error),'error');return;}progress=pres.data||[];
  }
- const bestStatus=new Map(),rank={not_started:1,in_progress:2,requires_revision:3,completed:4};
- progress.forEach(x=>{const old=bestStatus.get(x.syllabus_unit_id);if(!old||(rank[x.progress_status]||0)>(rank[old.progress_status]||0))bestStatus.set(x.syllabus_unit_id,x);});
+ const unitIds=new Set(units.map(x=>x.id)),bestStatus=new Map(),rank={not_started:1,in_progress:2,completed:3,requires_revision:4};
+ progress.filter(x=>unitIds.has(x.syllabus_unit_id)).forEach(x=>{const old=bestStatus.get(x.syllabus_unit_id);if(!old||(rank[x.progress_status]||0)>(rank[old.progress_status]||0))bestStatus.set(x.syllabus_unit_id,x);});
  const completed=[...bestStatus.values()].filter(x=>x.progress_status==='completed').length;
  const inProgress=[...bestStatus.values()].filter(x=>x.progress_status==='in_progress').length;
  const revision=[...bestStatus.values()].filter(x=>x.progress_status==='requires_revision').length;
  const pct=reports.filter(x=>x.teacher_reported_percentage!=null),avg=pct.length?(pct.reduce((s,x)=>s+Number(x.teacher_reported_percentage),0)/pct.length).toFixed(1)+'%':'Not reported';
  const submitted=reports.filter(x=>['submitted','reviewed','returned'].includes(x.report_status));
+ const monthly=new Map();
+ reports.forEach(r=>{const key=String(r.report_date||'').slice(0,7);if(!key)return;let m=monthly.get(key);if(!m){m={month:key,submitted:0,teachers:new Set(),percentages:[]};monthly.set(key,m);}if(['submitted','reviewed','returned'].includes(r.report_status)){m.submitted++;m.teachers.add(r.teacher_id);}if(r.teacher_reported_percentage!=null)m.percentages.push(Number(r.teacher_reported_percentage));});
+ const trendRows=[...monthly.values()].sort((a,b)=>a.month.localeCompare(b.month)).map(m=>'<tr><td>'+E(m.month)+'</td><td>'+E(m.submitted)+'</td><td>'+E(m.teachers.size)+'</td><td>'+E(m.percentages.length?(m.percentages.reduce((s,v)=>s+v,0)/m.percentages.length).toFixed(1)+'%':'Not reported')+'</td></tr>');
+ const monthlyHtml=trendRows.length?table(['Month','Submitted reports','Teachers submitting','Mean teacher-reported coverage'],trendRows):empty('No saved reports for the selected period.');
  const metrics=[
   ['Submitted / reviewed / returned reports',submitted.length],
   ['Draft reports',reports.filter(x=>x.report_status==='draft').length],
@@ -374,7 +378,7 @@ async function reportSummary(reports){
   ['Reports with issues',reports.filter(x=>x.difficulties?.trim()).length],
   ['Mean teacher-reported coverage',avg]
  ];
- box.innerHTML='<h3>Academic reporting summary</h3><div class="acad-grid three">'+metrics.map(([a,b])=>'<div class="acad-metric"><strong style="font-size:20px">'+E(b)+'</strong><span>'+E(a)+'</span></div>').join('')+'</div><p class="acad-muted">Period: '+E(val('monFrom')||'start of records')+' to '+E(val('monTo')||today())+'. Syllabus metrics use '+E(state.years.find(x=>x.id===selectedYear)?.label||'the selected academic year')+'. Topics are counted once by curriculum-unit ID; progress is an academic monitoring indicator, not proof of learning quality. Teacher percentages remain self-reported unless independently verified.</p>';
+ box.innerHTML='<h3>Academic reporting summary</h3><div class="acad-grid three">'+metrics.map(([a,b])=>'<div class="acad-metric"><strong style="font-size:20px">'+E(b)+'</strong><span>'+E(a)+'</span></div>').join('')+'</div><h3 style="margin-top:20px">Monthly coverage trend</h3>'+monthlyHtml+'<p class="acad-muted">Period: '+E(val('monFrom')||'start of records')+' to '+E(val('monTo')||today())+'. Syllabus metrics use '+E(state.years.find(x=>x.id===selectedYear)?.label||'the selected academic year')+'. Topics are counted once by curriculum-unit ID; progress is an academic monitoring indicator, not proof of learning quality. Teacher percentages remain self-reported unless independently verified.</p>';
 }
 async function saveYear(e){
  e.preventDefault();try{if(!(await permit('manage_syllabus')))throw new Error('Your role cannot manage academic years.');
@@ -472,7 +476,7 @@ async function openProfile(kind,id){
    db().from('teacher_schedule_entries').select('schedule_date,starts_at,ends_at,topic,status,entry_type').eq('teacher_id',x.id).eq('school_id',sid()).order('schedule_date',{ascending:false}).limit(100),
    db().from('teacher_assignments').select('class_id,section_id,subject_id,is_active').eq('teacher_id',x.id).eq('school_id',sid())
   ]);
-  $('directoryHistory').innerHTML='<h3>Assigned classes / subjects</h3>'+(assign.error?notice('assignErr',err(assign.error),'error'):table(['Class','Section','Subject','Status'],(assign.data||[]).map(r=>'<tr><td>'+E(state.classes.find(a=>a.id===r.class_id)?.name||'Class')+'</td><td>'+E(state.sections.find(a=>a.id===r.section_id)?.name||'All')+'</td><td>'+E(state.subjects.find(a=>a.id===r.subject_id)?.name||'Subject')+'</td><td>'+E(r.is_active?'Active':'Inactive')+'</td></tr>'))+'<h3>Daily reports</h3>'+(reports.error?notice('reportsErr',err(reports.error),'error'):table(['Date','Topic','Status','Reported %'],(reports.data||[]).map(r=>'<tr><td>'+E(r.report_date)+'</td><td>'+E(r.topic_taught)+'</td><td>'+E(r.report_status)+'</td><td>'+(r.teacher_reported_percentage==null?'Not reported':E(r.teacher_reported_percentage+'%'))+'</td></tr>'))+'<h3>Weekly plans</h3>'+(plans.error?notice('plansErr',err(plans.error),'error'):table(['Week','Chapter','Status'],(plans.data||[]).map(r=>'<tr><td>'+E(r.week_start)+' – '+E(r.week_end)+'</td><td>'+E(r.chapter_title||'—')+'</td><td>'+E(r.status)+'</td></tr>'))+'<h3>Smart Notes</h3>'+(notes.error?notice('notesErr',err(notes.error),'error'):table(['Updated','Title','Status'],(notes.data||[]).map(r=>'<tr><td>'+E(new Date(r.updated_at).toLocaleDateString())+'</td><td>'+E(r.title)+'</td><td>'+E(r.status)+'</td></tr>'))+'<h3>Schedule</h3>'+(sched.error?notice('schedErr',err(sched.error),'error'):table(['Date','Time','Topic','Type','Status'],(sched.data||[]).map(r=>'<tr><td>'+E(r.schedule_date||'—')+'</td><td>'+E((r.starts_at||'')+'–'+(r.ends_at||''))+'</td><td>'+E(r.topic||'—')+'</td><td>'+E(r.entry_type)+'</td><td>'+E(r.status)+'</td></tr>')));
+  $('directoryHistory').innerHTML='<h3>Assigned classes / subjects</h3>'+(assign.error?notice('assignErr',err(assign.error),'error'):table(['Class','Section','Subject','Status'],(assign.data||[]).map(r=>'<tr><td>'+E(state.classes.find(a=>a.id===r.class_id)?.name||'Class')+'</td><td>'+E(state.sections.find(a=>a.id===r.section_id)?.name||'All')+'</td><td>'+E(state.subjects.find(a=>a.id===r.subject_id)?.name||'Subject')+'</td><td>'+E(r.is_active?'Active':'Inactive')+'</td></tr>')))+'<h3>Daily reports</h3>'+(reports.error?notice('reportsErr',err(reports.error),'error'):table(['Date','Topic','Status','Reported %'],(reports.data||[]).map(r=>'<tr><td>'+E(r.report_date)+'</td><td>'+E(r.topic_taught)+'</td><td>'+E(r.report_status)+'</td><td>'+(r.teacher_reported_percentage==null?'Not reported':E(r.teacher_reported_percentage+'%'))+'</td></tr>')))+'<h3>Weekly plans</h3>'+(plans.error?notice('plansErr',err(plans.error),'error'):table(['Week','Chapter','Status'],(plans.data||[]).map(r=>'<tr><td>'+E(r.week_start)+' – '+E(r.week_end)+'</td><td>'+E(r.chapter_title||'—')+'</td><td>'+E(r.status)+'</td></tr>')))+'<h3>Smart Notes</h3>'+(notes.error?notice('notesErr',err(notes.error),'error'):table(['Updated','Title','Status'],(notes.data||[]).map(r=>'<tr><td>'+E(new Date(r.updated_at).toLocaleDateString())+'</td><td>'+E(r.title)+'</td><td>'+E(r.status)+'</td></tr>')))+'<h3>Schedule</h3>'+(sched.error?notice('schedErr',err(sched.error),'error'):table(['Date','Time','Topic','Type','Status'],(sched.data||[]).map(r=>'<tr><td>'+E(r.schedule_date||'—')+'</td><td>'+E((r.starts_at||'')+'–'+(r.ends_at||''))+'</td><td>'+E(r.topic||'—')+'</td><td>'+E(r.entry_type)+'</td><td>'+E(r.status)+'</td></tr>')));
  }
 }
 function exportDirectory(){const a=state.directoryRows||[];if(!a.length){msg('No directory records to export.');return;}const keys=['full_name','email','role','status','roll_number','mobile_number','class_id','section_id','created_at'];const csv=[keys.join(','),...a.map(x=>keys.map(k=>'"'+String(x[k]??'').replaceAll('"','""')+'"').join(','))].join('\r\n');download(csv,'noor-ai-directory-'+today()+'.csv');}
@@ -536,7 +540,6 @@ async function reactivateMember(id){
   const q=await db().rpc('noor_reactivate_school_member',{p_membership_id:id});if(q.error)throw q.error;
   msg('Membership reactivated; historical records retained. Teacher assignments must be explicitly re-assigned.','success');await loadStaff();
  }catch(e){msg(err(e),'error');}
-}
 }
 function renderManagement(){
  const cards=[['academic-monitoring','Academic Monitoring','Daily reports, syllabus progress and monthly/yearly summaries'],['student-directory','Student Directory','Find a student by name or roll number'],['teacher-directory','Teacher Directory','Actual teaching history, assignments and schedules'],['staff-management','Staff & Access','Invitations, Manager permissions, secret rotation and removal'],['attendance','Attendance','Save class attendance records'],['schedules','Schedules & Extra Classes','Scheduled and completed sessions'],['meetings','Meetings & Calendar','School meeting and event records'],['notices','School Notices','Create and list school announcements'],['audit-logs','Audit Logs','Authorized administrative history']];
