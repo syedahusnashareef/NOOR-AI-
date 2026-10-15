@@ -21,6 +21,7 @@ The existing schema was inspected before additive migrations were applied. The f
 - `schedule_audit_payload_and_school_name_guard`
 - `membership_aware_authorization_helpers`
 - `staff_invitation_profile_completion`
+- `public_authenticated_management_rpc_wrappers`
 
 The first five academic/management schema migrations were applied before the current source-parity pass; their exact SQL bodies are not yet mirrored one-to-one in this folder. The latest assessment-history and private-upload SQL files are available here. Do **not** treat this folder as a blank-project bootstrap until all earlier applied migration bodies have been checked into version control. Existing records must be kept.
 
