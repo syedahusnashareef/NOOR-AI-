@@ -81,3 +81,41 @@ This tracker separates live database work from frontend features that are still 
 - [ ] Do not enter real student or guardian data until account provisioning, authorization and persistence tests pass.
 
 Current honest status: the dedicated database and operational schema foundations are live. The website still needs end-to-end workflow wiring and verification; this is not yet a production-ready school SaaS.
+
+
+
+## Task 5 + Task 6 integration update — 16 October 2026
+
+This work extends the existing NOOR AI application and its existing Supabase project `npzedchxfurcphvpjock`; it does not create a second app or project.
+
+### Implemented in the current codebase
+
+- New teacher views: **My Teaching & Smart Notes**, **Weekly Teaching Plan**, **Today's Teaching Report**, **My Schedule**, and **Assessments & Marks**.
+- Smart Notes supports rough notes, reviewed OCR text, AI-generated draft notes, class/year/subject context, teacher approval before publish, saved drafts, and print/save-as-PDF.
+- Multiple JPG/PNG/WebP syllabus images can be uploaded with limits (8 per request, 4 MB each, 12 MB total). Original files are stored in the private `noor-syllabus-source` bucket with school/context metadata and restricted storage policies.
+- Weekly plans distinguish a saved plan from actual teaching completion. Daily reports have a draft/submitted/reviewed/returned status, local recovery, server autosave, version/revision trail, review feedback, and a teacher-facing notification stream.
+- Syllabus units/progress support chapter/lesson/topic status and optional teacher-reported percentages. Management summaries use saved records and label percentages as reported indicators.
+- Published Smart Notes have a student view restricted to approved notes for the student's class/section. Internal reports, draft notes and review remarks are not student-facing.
+- Assessment/test metadata and assessment-result tables now store actual marks, grades, and feedback; student views only read their own saved results and management can see authorized student results.
+- Management navigation now includes the School Management Portal, Student Directory, Teacher Directory, Academic Monitoring, Attendance, Assessments & Marks, Schedules & Extra Classes, Meetings, Notices, Staff & Access, and Audit Logs. The Management role chooser exposes exactly Principal, School Creator/Owner, and Manager; selecting a role by itself does not grant it.
+- Secure owner onboarding is mediated by a verified-email server RPC. School codes are random; the secret code is stored only as a hash and displayed once after creation/rotation. School invites use single-use token hashes, email matching and expiry. Existing membership removal preserves academic history; a trusted RPC handles reactivation.
+- Manager grants default to denied. The Manager permission matrix is Owner-controlled. Profile role/school/email fields are protected by database guardrails; membership gates limit school-specific records after removal.
+- A JWT-protected Edge Function `noor-ai-academic-assistant` handles AI generation/OCR server-side and logs token/cost estimates. No provider key is in frontend code.
+
+### Database work applied to the existing NOOR AI project
+
+Applied additive migrations include `academic_smart_notes_and_school_management`, `school_management_invites_and_permission_hardening`, `academic_permission_and_secret_stability_fixes`, `noor_role_membership_and_profile_guard_hardening`, `invitation_lifecycle_and_assessment_security`, `assessment_context_and_invitation_update_fixes`, `assessment_history_and_regrading_permissions`, and `private_syllabus_source_uploads`.
+
+Tables added/extended include academic years, syllabus units and progress, smart notes, weekly lesson plans, daily reports, report revisions/reviews, memberships, permission grants, invitations, teacher schedules, extra classes, administrative audit logs, assessments, assessment results, and private syllabus upload metadata. RLS is enabled on new tenant data and source files. Server-side constraints validate school/year/class/section/subject/assessment context and marks limits. No school/user academic history was dropped.
+
+### Validation performed and not yet complete
+
+- The schema was inspected before changes and the database migrations/RPCs/Edge Function were applied to the dedicated NOOR AI project.
+- The frontend source is integrated into the existing app and published via GitHub Pages.
+- **Full acceptance testing with real user accounts is not yet possible**: there were no provisioned school/teacher/student Auth records at the time of this change. A verified Owner must create the first school, configure its academic year/classes/subjects, assign teachers, and run the workflows with test accounts.
+- Set `AI_PROVIDER_API_KEY` as a Supabase Edge Function secret before AI generation/OCR can run. Optional `AI_PROVIDER_MODEL`, `AI_PROVIDER_CHAT_COMPLETIONS_URL`, `AI_INPUT_COST_PER_1K_USD`, and `AI_OUTPUT_COST_PER_1K_USD` are server-side configuration only.
+- OCR currently accepts image files only (JPG/PNG/WebP); direct PDF/DOC/DOCX extraction remains unimplemented. PDF output is browser print/save-as-PDF; tabular download is CSV, not native XLSX. Real email delivery remains unconfigured; notification rows are in-app/queued records, not proof of an email being sent.
+- Multi-school switching for one identity is not implemented; invitation acceptance rejects a user already attached to a different primary school. The requested "Master Key" is intentionally not a universal bypass credential; an actual recovery-key setup/rotation UI remains unimplemented.
+- Migration-source parity is still being backfilled: the latest assessment and private-upload SQL is checked into `supabase/migrations/`, but the first live schema migrations still need their exact source bodies mirrored before a fresh-project bootstrap is reproducible. See `supabase/migrations/README.md` and the non-destructive rollback guidance.
+
+**Status: implemented foundation, not final production acceptance.** Never treat generated notes as approved until a teacher reviews them; never treat an unreported class as zero teaching activity or syllabus percentage as proof of student learning.
