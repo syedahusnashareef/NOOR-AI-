@@ -36,5 +36,5 @@ window.NOOR_SOUND_MAP = {
     hi: ["शाबाश!","बहुत अच्छा!","ऐसे ही आगे बढ़ते रहो!"],
     te: ["చాలా బాగా చేశావు!","ఇలాగే కొనసాగించు!","అన్నీ మంచిగా జరగాలి!"]
   },
-  cheerEvents: ["level-up","sparkle","tada","applause","star-twinkle","rising-fill","check-tick"]
+  cheerEvents: ["level-up","sparkle","tada","applause","star-twinkle","rising-fill"]
 };
