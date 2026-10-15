@@ -6,6 +6,10 @@ Project: `npzedchxfurcphvpjock` (Mumbai region). Do not point these changes at C
 
 The existing schema was inspected before additive migrations were applied. The following migration names are recorded/applied on the live NOOR AI Supabase project:
 
+- `student_admin_workspace`
+- `school_operations_foundation`
+- `school_operations_policy_hardening`
+- `school_role_policy_hardening`
 - `academic_smart_notes_and_school_management`
 - `school_management_invites_and_permission_hardening`
 - `academic_permission_and_secret_stability_fixes`
@@ -14,6 +18,9 @@ The existing schema was inspected before additive migrations were applied. The f
 - `assessment_context_and_invitation_update_fixes`
 - `assessment_history_and_regrading_permissions`
 - `private_syllabus_source_uploads`
+- `schedule_audit_payload_and_school_name_guard`
+- `membership_aware_authorization_helpers`
+- `staff_invitation_profile_completion`
 
 The first five academic/management schema migrations were applied before the current source-parity pass; their exact SQL bodies are not yet mirrored one-to-one in this folder. The latest assessment-history and private-upload SQL files are available here. Do **not** treat this folder as a blank-project bootstrap until all earlier applied migration bodies have been checked into version control. Existing records must be kept.
 
