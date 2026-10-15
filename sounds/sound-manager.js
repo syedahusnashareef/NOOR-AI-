@@ -456,6 +456,8 @@
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", afterDomReady, { once: true });
     else afterDomReady();
   }
+  const guestLocal = readLocal(null);
+  if (guestLocal?.prefs) { prefs = cleanPrefs(guestLocal.prefs); localUpdatedAt = guestLocal.updatedAt || 0; }
   preload();
   applyMaster();
   installDelegates();
