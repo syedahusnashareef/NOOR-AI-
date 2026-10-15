@@ -55,9 +55,18 @@ function setDefaults(){
  bindContext();fillUnits();
 }
 function bindContext(){
- if($('acadClass'))$('acadClass').onchange=()=>{if($('acadSection'))$('acadSection').innerHTML=opts(state.sections.filter(x=>x.class_id===val('acadClass')),'id','name','Whole class');fillUnits();};
- ['acadYear','acadSubject','acadSection'].forEach(id=>{if($(id))$(id).onchange=fillUnits;});
+ if($('acadClass'))$('acadClass').onchange=()=>{if($('acadSection'))$('acadSection').innerHTML=opts(state.sections.filter(x=>x.class_id===val('acadClass')),'id','name','Whole class');fillSubjectsForSelectedClass();fillUnits();};
+ if($('acadSection'))$('acadSection').onchange=()=>{fillSubjectsForSelectedClass();fillUnits();};
+ ['acadYear','acadSubject'].forEach(id=>{if($(id))$(id).onchange=fillUnits;});
  if($('acadUnit'))$('acadUnit').onchange=()=>{const x=state.units.find(v=>v.id===val('acadUnit'));if(x&&$('acadTopic')&&!val('acadTopic'))$('acadTopic').value=x.title;};
+}
+function fillSubjectsForSelectedClass(){
+ const select=$('acadSubject');if(!select)return;
+ const previous=select.value,klass=val('acadClass'),section=val('acadSection');
+ let subjects=state.subjects;
+ if(role()==='teacher')subjects=subjects.filter(sub=>state.assignments.some(a=>a.class_id===klass&&(!a.subject_id||a.subject_id===sub.id)&&(!a.section_id||a.section_id===section||!section)));
+ select.innerHTML=opts(subjects,'id','name','Select assigned subject');
+ if(subjects.some(s=>s.id===previous))select.value=previous;else if(subjects.length===1)select.value=subjects[0].id;
 }
 function fillUnits(){
  if(!$('acadUnit'))return;const y=val('acadYear'),c=val('acadClass'),s=val('acadSubject'),se=val('acadSection'),old=val('acadUnit');
@@ -75,6 +84,8 @@ async function ai(payload){
 }
 function outputHtml(o){
  if(!o||typeof o!=='object')return E(o||'');
+ if(typeof o.notes_text==='string')return '<div style="white-space:pre-wrap;line-height:1.7">'+E(o.notes_text)+'</div>';
+ if(typeof o.teacher_edited_plan_text==='string')return '<div style="white-space:pre-wrap;line-height:1.7">'+E(o.teacher_edited_plan_text)+'</div>';
  const top=['title','subject','topic','language','summary','revision_activity','suggested_duration_minutes','confidence'];
  let h='';top.forEach(k=>{if(o[k]!==undefined)h+='<div><b>'+E(k.replaceAll('_',' '))+'</b><p>'+E(Array.isArray(o[k])?o[k].join(' · '):o[k])+'</p></div>';});
  ['learning_objectives','key_concepts','definitions','worked_examples','facts_and_formulas','short_answer_questions','long_answer_questions','revision_questions','homework','daily_plan','objectives','planned_coverage','teacher_checks','uncertainties','items_to_verify'].forEach(k=>{
@@ -83,6 +94,12 @@ function outputHtml(o){
   else h+='<p>'+E(o[k])+'</p>';
  });
  return h||'<pre>'+E(JSON.stringify(o,null,2))+'</pre>';
+}
+function readableText(o){
+ if(o&&typeof o.notes_text==='string')return o.notes_text;
+ if(o&&typeof o.teacher_edited_plan_text==='string')return o.teacher_edited_plan_text;
+ const el=document.createElement('div');el.innerHTML=outputHtml(o);
+ return String(el.innerText||el.textContent||'').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
 }
 async function imageData(inputId){
  const files=Array.from($(inputId)?.files||[]);
@@ -119,6 +136,7 @@ function renderTeaching(){
  '<div class="acad-actions">'+btn('extractSyllabusBtn','Extract text for review','alt')+btn('generateNotesBtn','Generate Smart Notes')+'</div><div id="ocrStatus" style="display:none"></div>'+
  ta('reviewedSyllabusText','Reviewed extracted text','Correct OCR mistakes here before generating notes')+
  '<div id="notesAiStatus" style="display:none"></div><div id="notesOutput" class="acad-notes-preview">'+empty('Generated note preview will appear here.')+'</div>'+
+ '<div class="field full"><label for="notesEditor">Edit your Smart Notes before saving or publishing</label><textarea id="notesEditor" rows="16" placeholder="Generated notes appear here after AI review. Edit the text freely."></textarea><div class="acad-field-help">Changes in this editor are saved with the note. Publishing remains a teacher-controlled action.</div></div>'+
  '<div class="acad-actions">'+btn('saveNotesDraft','Save draft','alt')+btn('publishNotes','Approve & publish','gold')+btn('printNotes','Print / Save PDF','alt')+'</div></form></section>'+
  '<section class="acad-panel"><h3>Define syllabus units</h3><p>Configure chapters, lessons and topics for the selected school, year, class and subject.</p><form id="unitForm" class="acad-form"><p class="acad-muted">Uses the same year, class, section and subject selected above for Smart Notes.</p>'+
  '<div class="acad-fields"><div class="field"><label for="unitType">Unit type</label><select id="unitType"><option value="chapter">Chapter</option><option value="lesson">Lesson</option><option value="topic">Topic</option></select></div><div class="field"><label for="unitSequence">Sequence</label><input id="unitSequence" type="number" min="0" value="1"></div><div class="field full"><label for="unitTitle">Unit title *</label><input id="unitTitle" required maxlength="240"></div><div class="field"><label for="unitWeight">Optional syllabus weight</label><input id="unitWeight" type="number" min="0" max="100" step="0.1"></div></div>'+btn('createUnitBtn','Add curriculum unit')+'</form><div id="unitList" style="margin-top:14px"></div></section>'+
@@ -139,7 +157,7 @@ async function generateNotes(){
  try{status('notesAiStatus','Generating notes…');const c=context(val('acadTopic'));if(!c.school_id||!c.academic_year_id||!c.class_id||!c.subject_id||!c.topic)throw new Error('Select year, class and subject, and enter a topic.');
  let imgs=state.images||[];if(!imgs.length)imgs=await imageData('syllabusImages');
  const r=await ai({...c,action:'notes',language:val('acadLanguage'),rough_text:val('roughNotes'),reviewed_source_text:val('reviewedSyllabusText'),images:imgs});
- state.lastAI=r.output;state.noteContext=c;$('notesOutput').innerHTML=outputHtml(r.output);
+ state.lastAI=r.output;state.noteContext=c;$('notesOutput').innerHTML=outputHtml(r.output);$('notesEditor').value=readableText(r.output);
  status('notesAiStatus','AI draft created. Teacher review is required before publishing. Tokens used: '+(r.usage?.input_tokens||0)+' input / '+(r.usage?.output_tokens||0)+' output.','success');
  }catch(e){status('notesAiStatus',err(e),'error');}
 }
@@ -147,9 +165,9 @@ async function saveNotes(publish){
  try{
  if(!state.lastAI||!state.noteContext)throw new Error('Generate notes first.');
  if(publish&&!confirm('Publish this reviewed note to the selected class / section?'))return;
- const c=state.noteContext,row={school_id:c.school_id,academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,unit_id:c.unit_id,title:String(state.lastAI.title||c.topic).slice(0,240),source_text:val('roughNotes'),extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run',source_file_ids:state.sourceFileIds||[],content:state.lastAI,status:publish?'published':'draft',published_to_students:!!publish,published_at:publish?new Date().toISOString():null,created_by:u().id,updated_by:u().id};
+ const edited=val('notesEditor');if(!edited)throw new Error('Review the generated notes in the editor before saving.');const content={...state.lastAI,notes_text:edited,teacher_edited:true};const c=state.noteContext,row={school_id:c.school_id,academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,unit_id:c.unit_id,title:String(state.lastAI.title||c.topic).slice(0,240),source_text:val('roughNotes'),extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run',source_file_ids:state.sourceFileIds||[],content,status:publish?'published':'draft',published_to_students:!!publish,published_at:publish?new Date().toISOString():null,created_by:u().id,updated_by:u().id};
  let r=state.editNoteId?await db().from('smart_notes').update(row).eq('id',state.editNoteId).select('id').single():await db().from('smart_notes').insert(row).select('id').single();
- if(r.error)throw r.error;state.editNoteId=r.data.id;if(state.sourceFileIds?.length){const attach=await db().from('syllabus_uploads').update({note_id:r.data.id,extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run'}).in('id',state.sourceFileIds);if(attach.error)throw attach.error;}msg(publish?'Reviewed notes published.':'Draft saved to the database.','success');await loadMyNotes();
+ if(r.error)throw r.error;state.editNoteId=r.data.id;state.lastAI=content;$('notesOutput').innerHTML=outputHtml(content);if(state.sourceFileIds?.length){const attach=await db().from('syllabus_uploads').update({note_id:r.data.id,extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run'}).in('id',state.sourceFileIds);if(attach.error)throw attach.error;}msg(publish?'Reviewed notes published.':'Draft saved to the database.','success');await loadMyNotes();
  }catch(e){msg(err(e),'error');}
 }
 async function createUnit(e){
@@ -199,10 +217,10 @@ async function openNote(id){
  const r=await db().from('smart_notes').select('*').eq('id',id).single();if(r.error){msg(err(r.error),'error');return;}
  const x=r.data;state.editNoteId=id;state.sourceFileIds=x.source_file_ids||[];state.lastAI=x.content;state.noteContext={school_id:x.school_id,academic_year_id:x.academic_year_id,class_id:x.class_id,section_id:x.section_id,subject_id:x.subject_id,unit_id:x.unit_id,topic:x.title};
  [['acadYear',x.academic_year_id],['acadClass',x.class_id],['acadSection',x.section_id||''],['acadSubject',x.subject_id],['acadUnit',x.unit_id||''],['acadTopic',x.title],['roughNotes',x.source_text],['reviewedSyllabusText',x.extracted_text]].forEach(([k,v])=>{if($(k))$(k).value=v||'';});
- $('notesOutput').innerHTML=outputHtml(x.content);msg('Saved note loaded. Review before approving or publishing.','success');
+ $('notesOutput').innerHTML=outputHtml(x.content);if($('notesEditor'))$('notesEditor').value=readableText(x.content);msg('Saved note loaded. Review before approving or publishing.','success');
 }
 function renderWeekly(){
- const body='<div class="acad-grid"><section class="acad-panel"><h3>Weekly Teaching Plan</h3><p>AI proposes a week using source text and objectives. Plans are not marked completed automatically.</p><form id="weekForm" class="acad-form">'+contextHtml(false,false)+'<div class="acad-fields">'+field('weekStart','Week starts','date',true)+field('weekEnd','Week ends','date',true)+'</div>'+field('weekChapter','Chapter / unit','text',false)+ta('weekObjectives','Learning objectives','Expected outcomes for pupils')+ta('weekRequirements','Timetable, activities, homework, assessments, resources','Available days, periods and resources')+ta('weekSource','Reviewed syllabus source text','Paste reviewed syllabus text')+'<div id="weekStatus" style="display:none"></div><div id="weekPreview" class="acad-notes-preview">'+empty('Suggested week will appear here.')+'</div><div class="acad-actions">'+btn('makeWeekPlan','Suggest weekly plan')+btn('saveWeekPlan','Save editable plan','alt')+btn('printWeekPlan','Print / Save PDF','gold')+'</div></form></section><section class="acad-panel"><h3>Saved plans</h3><div id="savedWeekPlans">'+empty('Loading saved plans…')+'</div></section></div>';
+ const body='<div class="acad-grid"><section class="acad-panel"><h3>Weekly Teaching Plan</h3><p>AI proposes a week using source text and objectives. Plans are not marked completed automatically.</p><form id="weekForm" class="acad-form">'+contextHtml(false,false)+'<div class="acad-fields">'+field('weekStart','Week starts','date',true)+field('weekEnd','Week ends','date',true)+'</div>'+field('weekChapter','Chapter / unit','text',false)+ta('weekObjectives','Learning objectives','Expected outcomes for pupils')+ta('weekRequirements','Timetable, activities, homework, assessments, resources','Available days, periods and resources')+ta('weekSource','Reviewed syllabus source text','Paste reviewed syllabus text')+'<div id="weekStatus" style="display:none"></div><div id="weekPreview" class="acad-notes-preview">'+empty('Suggested week will appear here.')+'</div><div class="field full"><label for="weekPlanEditor">Edit the suggested weekly plan</label><textarea id="weekPlanEditor" rows="13" placeholder="Generate a plan and adjust each day before saving."></textarea></div><div class="acad-actions">'+btn('makeWeekPlan','Suggest weekly plan')+btn('saveWeekPlan','Save editable plan','alt')+btn('printWeekPlan','Print / Save PDF','gold')+'</div></form></section><section class="acad-panel"><h3>Saved plans</h3><div id="savedWeekPlans">'+empty('Loading saved plans…')+'</div></section></div>';
  $('view-weekly-plan').innerHTML=shell('Teacher workspace','Weekly Teaching Plan','Organize the week by subject, academic year, lesson objective and actual timetable.',body);
  $('weekForm').onsubmit=e=>e.preventDefault();$('makeWeekPlan').onclick=makeWeek;$('saveWeekPlan').onclick=saveWeek;$('printWeekPlan').onclick=()=>window.print();
  loadContext().then(()=>{setDefaults();loadWeeks();}).catch(e=>status('weekStatus',err(e),'error'));
@@ -211,19 +229,19 @@ async function makeWeek(){
  try{const c=context(val('weekChapter'));if(!c.school_id||!c.academic_year_id||!c.class_id||!c.subject_id||!val('weekStart')||!val('weekEnd'))throw new Error('Select year/class/subject and week dates.');
  if(val('weekStart')>val('weekEnd'))throw new Error('Week end must be after the start.');
  const r=await ai({...c,action:'weekly_plan',week_start:val('weekStart'),week_end:val('weekEnd'),objectives:val('weekObjectives'),weekly_requirements:val('weekRequirements'),reviewed_source_text:val('weekSource')});
- state.planOutput=r.output;$('weekPreview').innerHTML=outputHtml(r.output);status('weekStatus','Suggested plan is editable and remains a draft until saved.','success');
+ state.planOutput=r.output;$('weekPreview').innerHTML=outputHtml(r.output);$('weekPlanEditor').value=readableText(r.output);status('weekStatus','Suggested plan is editable and remains a draft until saved.','success');
  }catch(e){status('weekStatus',err(e),'error');}
 }
 async function saveWeek(){
- try{if(!state.planOutput)throw new Error('Generate a plan first.');const c=context(val('weekChapter'));const row={school_id:sid(),academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,week_start:val('weekStart'),week_end:val('weekEnd'),chapter_title:val('weekChapter'),unit_id:c.unit_id,plan_data:state.planOutput,status:'draft',created_by:u().id,updated_by:u().id};
- const r=state.editPlanId?await db().from('lesson_plans').update(row).eq('id',state.editPlanId).select('id').single():await db().from('lesson_plans').insert(row).select('id').single();if(r.error)throw r.error;state.editPlanId=r.data.id;msg('Weekly plan saved as draft.','success');await loadWeeks();
+ try{if(!state.planOutput)throw new Error('Generate a plan first.');const c=context(val('weekChapter'));const edited=val('weekPlanEditor');if(!edited)throw new Error('Review the weekly plan in the editor before saving.');const planData={...state.planOutput,teacher_edited_plan_text:edited,teacher_edited:true};const row={school_id:sid(),academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,week_start:val('weekStart'),week_end:val('weekEnd'),chapter_title:val('weekChapter'),unit_id:c.unit_id,plan_data:planData,status:'draft',created_by:u().id,updated_by:u().id};
+ const r=state.editPlanId?await db().from('lesson_plans').update(row).eq('id',state.editPlanId).select('id').single():await db().from('lesson_plans').insert(row).select('id').single();if(r.error)throw r.error;state.editPlanId=r.data.id;state.planOutput=planData;$('weekPreview').innerHTML=outputHtml(planData);msg('Weekly plan saved as draft.','success');await loadWeeks();
  }catch(e){msg(err(e),'error');}
 }
 async function loadWeeks(){
  const box=$('savedWeekPlans');if(!box)return;let q=db().from('lesson_plans').select('id,week_start,week_end,chapter_title,status,plan_data,academic_year_id,class_id,subject_id,section_id').eq('school_id',sid()).order('week_start',{ascending:false}).limit(60);
  if(role()==='teacher')q=q.eq('teacher_id',u().id);const r=await q;if(r.error){box.innerHTML=notice('weekLoadError',err(r.error),'error');return;}
  box.innerHTML=table(['Week','Chapter','Status','Open'],(r.data||[]).map(x=>'<tr><td>'+E(x.week_start)+' – '+E(x.week_end)+'</td><td>'+E(x.chapter_title||x.plan_data?.title||'Weekly Plan')+'</td><td>'+E(x.status)+'</td><td><button class="acad-btn alt" data-week="'+E(x.id)+'" type="button">Open</button></td></tr>'));
- box.querySelectorAll('[data-week]').forEach(b=>b.onclick=async()=>{const q=await db().from('lesson_plans').select('*').eq('id',b.dataset.week).single();if(q.error){msg(err(q.error),'error');return;}const x=q.data;state.editPlanId=x.id;state.planOutput=x.plan_data;[['acadYear',x.academic_year_id],['acadClass',x.class_id],['acadSection',x.section_id||''],['acadSubject',x.subject_id],['weekStart',x.week_start],['weekEnd',x.week_end],['weekChapter',x.chapter_title||'']].forEach(([k,v])=>{if($(k))$(k).value=v||'';});$('weekPreview').innerHTML=outputHtml(x.plan_data);});
+ box.querySelectorAll('[data-week]').forEach(b=>b.onclick=async()=>{const q=await db().from('lesson_plans').select('*').eq('id',b.dataset.week).single();if(q.error){msg(err(q.error),'error');return;}const x=q.data;state.editPlanId=x.id;state.planOutput=x.plan_data;[['acadYear',x.academic_year_id],['acadClass',x.class_id],['acadSection',x.section_id||''],['acadSubject',x.subject_id],['weekStart',x.week_start],['weekEnd',x.week_end],['weekChapter',x.chapter_title||'']].forEach(([k,v])=>{if($(k))$(k).value=v||'';});$('weekPreview').innerHTML=outputHtml(x.plan_data);if($('weekPlanEditor'))$('weekPlanEditor').value=readableText(x.plan_data);});
 }
 function reportKey(){return 'noor-report-draft-v2-'+u()?.id+'-'+sid();}
 function reportData(){
@@ -290,18 +308,18 @@ async function loadReportHistory(){
  box.innerHTML=r.error?notice('historyError',err(r.error),'error'):table(['Date','Topic','Status','Updated'],(r.data||[]).map(x=>'<tr><td>'+E(x.report_date)+'</td><td>'+E(x.topic_taught)+'</td><td>'+E(x.report_status)+'</td><td>'+E(new Date(x.updated_at).toLocaleString())+'</td></tr>'));
 }
 function renderMonitoring(){
- const body='<section class="acad-panel"><div class="acad-toolbar"><div><h3>Daily academic monitoring</h3><p>Records with no submission are not treated as zero teaching activity.</p></div>'+btn('refreshMonitor','Refresh')+'</div><div class="acad-filter"><div><label class="acad-label" for="monFrom">From</label><input id="monFrom" type="date" value="'+new Date(Date.now()-29*86400000).toISOString().slice(0,10)+'"></div><div><label class="acad-label" for="monTo">To</label><input id="monTo" type="date" value="'+today()+'"></div><div><label class="acad-label" for="monStatus">Status</label><select id="monStatus"><option value="">All statuses</option><option>draft</option><option>submitted</option><option>reviewed</option><option>returned</option></select></div><div><label class="acad-label" for="monTeacher">Teacher</label><select id="monTeacher"><option value="">All teachers</option></select></div></div><div class="acad-filter"><div><label class="acad-label" for="monClass">Class</label><select id="monClass">'+opts(state.classes,'id','name','All classes')+'</select></div><div><label class="acad-label" for="monSection">Section</label><select id="monSection">'+opts(state.sections,'id','name','All sections')+'</select></div><div><label class="acad-label" for="monSubject">Subject</label><select id="monSubject">'+opts(state.subjects,'id','name','All subjects')+'</select></div><div class="acad-actions">'+btn('applyMonitor','Apply filters')+btn('exportMonitor','Export CSV','alt')+btn('printMonitor','Print / Save PDF','gold')+'</div></div><div id="monitorStatus" style="display:none"></div><div id="monitorStats" class="acad-metrics"></div><div id="monitorRows" style="margin-top:16px">'+empty('Loading saved reports…')+'</div><div id="reviewFormPanel" style="margin-top:16px"></div><div id="reviewHistory" style="margin-top:16px"></div></section>';
+ const body='<section class="acad-panel"><div class="acad-toolbar"><div><h3>Daily academic monitoring</h3><p>Records with no submission are not treated as zero teaching activity.</p></div>'+btn('refreshMonitor','Refresh')+'</div><div class="acad-filter"><div><label class="acad-label" for="monFrom">From</label><input id="monFrom" type="date" value="'+new Date(Date.now()-29*86400000).toISOString().slice(0,10)+'"></div><div><label class="acad-label" for="monTo">To</label><input id="monTo" type="date" value="'+today()+'"></div><div><label class="acad-label" for="monYear">Academic year</label><select id="monYear"><option value="">All academic years</option></select></div><div><label class="acad-label" for="monStatus">Status</label><select id="monStatus"><option value="">All statuses</option><option>draft</option><option>submitted</option><option>reviewed</option><option>returned</option></select></div><div><label class="acad-label" for="monTeacher">Teacher</label><select id="monTeacher"><option value="">All teachers</option></select></div></div><div class="acad-filter"><div><label class="acad-label" for="monClass">Class</label><select id="monClass">'+opts(state.classes,'id','name','All classes')+'</select></div><div><label class="acad-label" for="monSection">Section</label><select id="monSection">'+opts(state.sections,'id','name','All sections')+'</select></div><div><label class="acad-label" for="monSubject">Subject</label><select id="monSubject">'+opts(state.subjects,'id','name','All subjects')+'</select></div><div class="acad-actions">'+btn('applyMonitor','Apply filters')+btn('exportMonitor','Export CSV','alt')+btn('printMonitor','Print / Save PDF','gold')+'</div></div><div id="monitorStatus" style="display:none"></div><div id="monitorStats" class="acad-metrics"></div><div id="monitorRows" style="margin-top:16px">'+empty('Loading saved reports…')+'</div><div id="reviewFormPanel" style="margin-top:16px"></div><div id="reviewHistory" style="margin-top:16px"></div></section>';
  let yearForm='';
  if(leader()||role()==='manager')yearForm=panel('Academic year setup','Create a named year for the school. Historical reports keep their year link.','<form id="yearForm" class="acad-form">'+field('newYearLabel','Academic year label','text',true,'2026–2027')+field('newYearStart','Start date','date',true)+field('newYearEnd','End date','date',true)+'<label class="acad-check-row"><input id="newYearCurrent" type="checkbox"> Mark as current</label>'+btn('saveAcademicYear','Save year')+'</form>');
  $('view-academic-monitoring').innerHTML=shell('School leadership','Academic Monitoring','Saved daily reports, syllabus progress and monthly/yearly teaching indicators. Coverage is not a substitute for measuring student learning.',body+yearForm);
  $('refreshMonitor').onclick=async()=>{await loadContext();await loadTeachers();await loadReports();};$('applyMonitor').onclick=loadReports;$('exportMonitor').onclick=exportReports;$('printMonitor').onclick=()=>window.print();
  if($('yearForm'))$('yearForm').onsubmit=saveYear;
- loadContext().then(async()=>{await loadTeachers();await loadReports();}).catch(e=>status('monitorStatus',err(e),'error'));
+ loadContext().then(async()=>{const yr=$('monYear');if(yr){yr.innerHTML=opts(state.years,'id','label','All academic years');const current=state.years.find(x=>x.is_current)||state.years[0];if(current)yr.value=current.id;}await loadTeachers();await loadReports();}).catch(e=>status('monitorStatus',err(e),'error'));
 }
 async function loadTeachers(){
  const x=$('monTeacher');if(!x)return;
  if(!leader()&&!(await permit('view_teacher_activity'))){x.innerHTML='<option value="">Not authorized</option>';return;}
- const r=await db().from('profiles').select('id,full_name,email').eq('school_id',sid()).eq('role','teacher').order('full_name').limit(500);
+ const r=await db().from('profiles').select('id,full_name,email,status').eq('school_id',sid()).eq('role','teacher').eq('status','active').order('full_name').limit(500);
  state.teachers=r.data||[];x.innerHTML=opts(state.teachers,'id','full_name','All teachers');
 }
 async function loadReports(){
@@ -309,9 +327,12 @@ async function loadReports(){
  try{
  let q=db().from('daily_teaching_reports').select('id,school_id,academic_year_id,teacher_id,class_id,section_id,subject_id,unit_id,report_date,topic_taught,report_status,teacher_reported_percentage,activities_completed,homework_assigned,difficulties,next_lesson_plan,updated_at,submitted_at,version,planned_coverage,actual_coverage,page_range,student_understanding,additional_remarks,rough_input').eq('school_id',sid()).gte('report_date',val('monFrom')||'1900-01-01').lte('report_date',val('monTo')||today()).order('report_date',{ascending:false}).limit(1000);
  [['monStatus','report_status'],['monTeacher','teacher_id'],['monClass','class_id'],['monSection','section_id'],['monSubject','subject_id']].forEach(([a,b])=>{if(val(a))q=q.eq(b,val(a));});
+ if(val('monYear'))q=q.eq('academic_year_id',val('monYear'));
  const r=await q;if(r.error)throw r.error;state.reports=r.data||[];
- const records=state.reports,sub=records.filter(x=>['submitted','reviewed','returned'].includes(x.report_status)).length,teachers=new Set(records.map(x=>x.teacher_id)).size,issues=records.filter(x=>x.difficulties?.trim()).length;
- $('monitorStats').innerHTML=[['Reports',records.length],['Submitted / reviewed',sub],['Teachers with records',teachers],['Reports with issues',issues]].map(([a,b])=>'<div class="acad-metric"><strong>'+E(b)+'</strong><span>'+E(a)+'</span></div>').join('');
+ const records=state.reports,submittedRows=records.filter(x=>['submitted','reviewed','returned'].includes(x.report_status)),submittedTeachers=new Set(submittedRows.map(x=>x.teacher_id)),teachersWithAny=new Set(records.map(x=>x.teacher_id)).size,issues=records.filter(x=>x.difficulties?.trim()).length;
+ const noNarrowFilters=!val('monStatus')&&!val('monTeacher')&&!val('monClass')&&!val('monSection')&&!val('monSubject');
+ const pending=noNarrowFilters?Math.max(0,state.teachers.length-submittedTeachers.size):'—';
+ $('monitorStats').innerHTML=[['Active teachers',state.teachers.length],['Teachers with submitted reports',submittedTeachers.size],['Teachers with no submission in range',pending],['Reports in range',records.length],['Classes covered',new Set(records.map(x=>x.class_id)).size],['Subjects taught',new Set(records.map(x=>x.subject_id)).size],['Teachers with any record',teachersWithAny],['Reports with issues',issues]].map(([a,b])=>'<div class="acad-metric"><strong>'+E(b)+'</strong><span>'+E(a)+'</span></div>').join('');
  box.innerHTML=table(['Date','Teacher','Class / subject','Topic','Status','Details'],records.map(x=>'<tr><td>'+E(x.report_date)+'</td><td>'+E((state.teachers||[]).find(t=>t.id===x.teacher_id)?.full_name||'Teacher')+'</td><td>'+E(state.classes.find(c=>c.id===x.class_id)?.name||'Class')+'<div class="acad-muted">'+E(state.subjects.find(s=>s.id===x.subject_id)?.name||'Subject')+'</div></td><td>'+E(x.topic_taught)+'</td><td><span class="acad-status">'+E(x.report_status)+'</span></td><td>'+(x.difficulties?'<span class="acad-status warn">Issue</span>':'')+' <button type="button" class="acad-btn alt" data-report="'+E(x.id)+'">Open / review</button></td></tr>'));
  box.querySelectorAll('[data-report]').forEach(b=>b.onclick=()=>openReview(b.dataset.report));
  await reportSummary(records);status('monitorStatus',records.length?'Loaded actual saved reports. Missing reports are not inferred from the timetable.':'No saved reports match these filters.',records.length?'success':'');
@@ -319,13 +340,41 @@ async function loadReports(){
 }
 async function reportSummary(reports){
  const box=$('reviewHistory');if(!box)return;
- const years=state.years;let unitCount=0,completeCount=0;
- const y=val('monYear')||years.find(x=>x.is_current)?.id||years[0]?.id;
- if(y){const a=await db().from('syllabus_units').select('id').eq('school_id',sid()).eq('academic_year_id',y).eq('is_active',true);unitCount=(a.data||[]).length;
- const b=await db().from('syllabus_progress').select('syllabus_unit_id').eq('school_id',sid()).eq('academic_year_id',y).eq('progress_status','completed');completeCount=new Set((b.data||[]).map(x=>x.syllabus_unit_id)).size;}
+ const selectedYear=val('monYear')||state.years.find(x=>x.is_current)?.id||state.years[0]?.id;
+ let units=[],progress=[];
+ if(selectedYear){
+  let uq=db().from('syllabus_units').select('id,class_id,section_id,subject_id,title').eq('school_id',sid()).eq('academic_year_id',selectedYear).eq('is_active',true);
+  if(val('monClass'))uq=uq.eq('class_id',val('monClass'));
+  if(val('monSection'))uq=uq.or('section_id.is.null,section_id.eq.'+val('monSection'));
+  if(val('monSubject'))uq=uq.eq('subject_id',val('monSubject'));
+  const ures=await uq;if(ures.error){box.innerHTML=notice('summaryUnitsError',err(ures.error),'error');return;}units=ures.data||[];
+  let pq=db().from('syllabus_progress').select('syllabus_unit_id,progress_status,teacher_reported_percentage').eq('school_id',sid()).eq('academic_year_id',selectedYear);
+  if(val('monClass'))pq=pq.eq('class_id',val('monClass'));
+  if(val('monSection'))pq=pq.eq('section_id',val('monSection'));
+  if(val('monSubject'))pq=pq.eq('subject_id',val('monSubject'));
+  const pres=await pq;if(pres.error){box.innerHTML=notice('summaryProgressError',err(pres.error),'error');return;}progress=pres.data||[];
+ }
+ const bestStatus=new Map(),rank={not_started:1,in_progress:2,requires_revision:3,completed:4};
+ progress.forEach(x=>{const old=bestStatus.get(x.syllabus_unit_id);if(!old||(rank[x.progress_status]||0)>(rank[old.progress_status]||0))bestStatus.set(x.syllabus_unit_id,x);});
+ const completed=[...bestStatus.values()].filter(x=>x.progress_status==='completed').length;
+ const inProgress=[...bestStatus.values()].filter(x=>x.progress_status==='in_progress').length;
+ const revision=[...bestStatus.values()].filter(x=>x.progress_status==='requires_revision').length;
  const pct=reports.filter(x=>x.teacher_reported_percentage!=null),avg=pct.length?(pct.reduce((s,x)=>s+Number(x.teacher_reported_percentage),0)/pct.length).toFixed(1)+'%':'Not reported';
- const metrics=[['Submitted / reviewed',reports.filter(x=>['submitted','reviewed','returned'].includes(x.report_status)).length],['Drafts',reports.filter(x=>x.report_status==='draft').length],['Syllabus units defined',unitCount],['Units in completed status',completeCount],['Reports with homework',reports.filter(x=>x.homework_assigned?.trim()).length],['Issues reported',reports.filter(x=>x.difficulties?.trim()).length],['Mean teacher-reported %',avg]];
- box.innerHTML='<h3>Monthly / yearly saved-record summary</h3><div class="acad-grid three">'+metrics.map(([a,b])=>'<div class="acad-metric"><strong style="font-size:20px">'+E(b)+'</strong><span>'+E(a)+'</span></div>').join('')+'</div><p class="acad-muted">Summary uses the selected date range. Reported % is self-reported unless verified independently; no learning outcome is inferred.</p>';
+ const submitted=reports.filter(x=>['submitted','reviewed','returned'].includes(x.report_status));
+ const metrics=[
+  ['Submitted / reviewed / returned reports',submitted.length],
+  ['Draft reports',reports.filter(x=>x.report_status==='draft').length],
+  ['Syllabus units defined',units.length],
+  ['Units marked completed',completed],
+  ['Units in progress',inProgress],
+  ['Units requiring revision',revision],
+  ['Units not yet marked complete',Math.max(0,units.length-completed)],
+  ['Reports with homework assigned',reports.filter(x=>x.homework_assigned?.trim()).length],
+  ['Reports with assessment/test activity mentioned',reports.filter(x=>/assessment|test|quiz/i.test((x.activities_completed||'')+' '+(x.homework_assigned||''))).length],
+  ['Reports with issues',reports.filter(x=>x.difficulties?.trim()).length],
+  ['Mean teacher-reported coverage',avg]
+ ];
+ box.innerHTML='<h3>Academic reporting summary</h3><div class="acad-grid three">'+metrics.map(([a,b])=>'<div class="acad-metric"><strong style="font-size:20px">'+E(b)+'</strong><span>'+E(a)+'</span></div>').join('')+'</div><p class="acad-muted">Period: '+E(val('monFrom')||'start of records')+' to '+E(val('monTo')||today())+'. Syllabus metrics use '+E(state.years.find(x=>x.id===selectedYear)?.label||'the selected academic year')+'. Topics are counted once by curriculum-unit ID; progress is an academic monitoring indicator, not proof of learning quality. Teacher percentages remain self-reported unless independently verified.</p>';
 }
 async function saveYear(e){
  e.preventDefault();try{if(!(await permit('manage_syllabus')))throw new Error('Your role cannot manage academic years.');
@@ -350,9 +399,23 @@ async function loadReviewHistory(id){
  box.innerHTML=r.error?notice('reviewHistoryError',err(r.error),'error'):table(['When','Decision','Feedback','Internal remark'],(r.data||[]).map(x=>'<tr><td>'+E(new Date(x.created_at).toLocaleString())+'</td><td>'+E(x.action)+'</td><td>'+E(x.feedback)+'</td><td>'+E(x.internal_remark||'—')+'</td></tr>'));
 }
 function exportReports(){
- const h=['report_date','teacher_id','class_id','section_id','subject_id','topic_taught','report_status','teacher_reported_percentage','planned_coverage','actual_coverage','activities_completed','homework_assigned','student_understanding','difficulties','next_lesson_plan','additional_remarks'];
- const csv=[h.join(','),...(state.reports||[]).map(r=>h.map(k=>'"'+String(r[k]??'').replaceAll('"','""')+'"').join(','))].join('\r\n');
- const b=new Blob([csv],{type:'text/csv;charset=utf-8;'}),url=URL.createObjectURL(b),a=document.createElement('a');a.href=url;a.download='noor-ai-academic-reports-'+today()+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+ const headers=['School','Academic year','Report date','Teacher','Class','Section','Subject','Topic taught','Status','Teacher-reported coverage (%)','Planned coverage','Actual coverage','Lesson/page range','Activities completed','Homework assigned','Student understanding / participation','Difficulties','Next lesson','Remarks','Submitted at'];
+ const quote=v=>'"'+String(v??'').replaceAll('"','""')+'"';
+ const rows=(state.reports||[]).map(r=>[
+  A().school?.name||sid(),
+  state.years.find(y=>y.id===r.academic_year_id)?.label||'—',
+  r.report_date,
+  state.teachers.find(t=>t.id===r.teacher_id)?.full_name||'—',
+  state.classes.find(k=>k.id===r.class_id)?.name||'—',
+  state.sections.find(s=>s.id===r.section_id)?.name||(r.section_id?'—':'Whole class'),
+  state.subjects.find(s=>s.id===r.subject_id)?.name||'—',
+  r.topic_taught,r.report_status,r.teacher_reported_percentage,
+  r.planned_coverage,r.actual_coverage,r.page_range,r.activities_completed,
+  r.homework_assigned,r.student_understanding,r.difficulties,r.next_lesson_plan,
+  r.additional_remarks,r.submitted_at
+ ]);
+ const csv=[headers,...rows].map(row=>row.map(quote).join(',')).join('\r\n');
+ download('\ufeff'+csv,'noor-ai-academic-report-'+today()+'.csv');
 }
 async function renderStudentNotes(){
  const body='<section class="acad-panel"><div class="acad-toolbar"><div><h3>Approved study material</h3><p>Only teacher-published notes for your class/section are requested; database RLS filters the results as well.</p></div>'+btn('refreshStudentNotes','Refresh')+'</div><div id="studentNotesList">'+empty('Loading notes…')+'</div></section>';
@@ -379,8 +442,12 @@ async function searchDirectory(kind){
  const student=kind==='student',query=val('dirSearch').toLowerCase();let q=db().from('profiles').select('id,full_name,email,role,status,school_id,mobile_number,parent_name,roll_number,class_id,section_id,created_at,updated_at').eq('school_id',sid()).eq('role',student?'student':'teacher').order('full_name').limit(500);
  if(val('dirClass'))q=q.eq('class_id',val('dirClass'));if(val('dirSection'))q=q.eq('section_id',val('dirSection'));if(['active','pending','inactive'].includes(val('dirStatus')))q=q.eq('status',val('dirStatus'));
  const r=await q;if(r.error){status('dirStatusMessage',err(r.error),'error');return;}state.directoryRows=r.data||[];
- const rows=state.directoryRows.filter(x=>!query||[x.full_name,x.email,x.roll_number,x.mobile_number].some(s=>String(s||'').toLowerCase().includes(query)));
- $('dirResults').innerHTML=table(['Name / email','Class / section','Roll / mobile','Status','Open'],rows.map(x=>'<tr><td><b>'+E(x.full_name)+'</b><div class="acad-muted">'+E(x.email)+'</div></td><td>'+E(state.classes.find(a=>a.id===x.class_id)?.name||'—')+'<div class="acad-muted">'+E(state.sections.find(a=>a.id===x.section_id)?.name||'—')+'</div></td><td>'+E(x.roll_number||x.id.slice(0,8))+'<div class="acad-muted">'+E(x.mobile_number||'')+'</div></td><td>'+E(x.status)+'</td><td><button type="button" class="acad-btn alt" data-openprofile="'+E(x.id)+'">Open profile</button></td></tr>'));
+ if(!student&&state.directoryRows.length){const mr=await db().from('school_memberships').select('user_id,username,employee_id,status,removed_at,removal_reason').eq('school_id',sid()).in('user_id',state.directoryRows.map(x=>x.id));if(mr.error){status('dirStatusMessage',err(mr.error),'error');return;}const byUser=new Map((mr.data||[]).map(m=>[m.user_id,m]));state.directoryRows=state.directoryRows.map(x=>{const m=byUser.get(x.id);return {...x,username:m?.username,employee_id:m?.employee_id,membership_status:m?.status,removed_at:m?.removed_at,removal_reason:m?.removal_reason};});}
+ if(val('dirStatus')==='removed')state.directoryRows=state.directoryRows.filter(x=>x.membership_status==='removed');
+ else if(val('dirStatus')==='active')state.directoryRows=state.directoryRows.filter(x=>x.status==='active'&&(!x.membership_status||x.membership_status==='active'));
+ else if(val('dirStatus')==='transferred')state.directoryRows=state.directoryRows.filter(x=>x.membership_status==='transferred');
+ const rows=state.directoryRows.filter(x=>!query||[x.full_name,x.email,x.roll_number,x.mobile_number,x.username,x.employee_id].some(s=>String(s||'').toLowerCase().includes(query)));
+ $('dirResults').innerHTML=table(['Name / email','Class / section','Roll / employee ID','School status','Open'],rows.map(x=>'<tr><td><b>'+E(x.full_name)+'</b><div class="acad-muted">'+E(x.email)+'</div>'+(x.username?'<div class="acad-muted">@'+E(x.username)+'</div>':'')+'</td><td>'+E(state.classes.find(a=>a.id===x.class_id)?.name||'—')+'<div class="acad-muted">'+E(state.sections.find(a=>a.id===x.section_id)?.name||'—')+'</div></td><td>'+E(student?(x.roll_number||x.id.slice(0,8)):(x.employee_id||x.username||x.id.slice(0,8)))+'<div class="acad-muted">'+E(x.mobile_number||'')+'</div></td><td>'+E(x.membership_status||x.status||'—')+(x.removed_at?'<div class="acad-muted">Removed '+E(new Date(x.removed_at).toLocaleDateString())+'</div>':'')+'</td><td><button type="button" class="acad-btn alt" data-openprofile="'+E(x.id)+'">Open profile</button></td></tr>'));
  $('dirResults').querySelectorAll('[data-openprofile]').forEach(b=>b.onclick=()=>openProfile(kind,b.dataset.openprofile));
  status('dirStatusMessage',rows.length+' saved '+(student?'student':'teacher')+' record(s). Missing activity is not inferred.','success');
 }
@@ -482,16 +549,19 @@ async function renderSchedules(){
   $('view-schedules').innerHTML=shell('Teacher workspace','My Schedule','View saved timetable entries. Only authorized leadership can create or change schedules; completed sessions require an explicit record.','<section class="acad-panel"><div class="acad-toolbar"><h3>My scheduled sessions</h3>'+btn('refreshSchedules','Refresh','alt')+'</div><div id="scheduleRows"></div></section>');
   await loadContext();await loadSchedules();return;
  }
- const body='<div class="acad-grid"><section class="acad-panel"><h3>Schedule / extra class</h3><p>A planned class remains scheduled until someone records actual completion.</p><form id="scheduleForm" class="acad-form">'+contextHtml(true,false)+'<div class="field"><label for="scheduleType">Type</label><select id="scheduleType"><option value="regular">Regular period</option><option value="extra">Extra class</option><option value="remedial">Remedial</option><option value="revision">Revision</option><option value="meeting">Meeting</option></select></div>'+field('scheduleStart','Start time','time',true)+field('scheduleEnd','End time','time',true)+field('scheduleTopic','Topic / purpose','text',true)+ta('schedulePurpose','Reason / resources')+'<div id="scheduleStatus" style="display:none"></div>'+btn('createSchedule','Save schedule')+'</form></section><section class="acad-panel"><h3>Saved schedule</h3><div id="scheduleRows"></div></section></div>';
+ const body='<div class="acad-grid"><section class="acad-panel"><h3>Schedule / extra class</h3><p>A planned class remains scheduled until someone records actual completion.</p><form id="scheduleForm" class="acad-form">'+contextHtml(true,false)+'<div class="field"><label for="scheduleTeacher">Assigned teacher *</label><select id="scheduleTeacher" required><option value="">Loading active teachers…</option></select></div><div class="field"><label for="scheduleType">Type</label><select id="scheduleType"><option value="regular">Regular period</option><option value="extra">Extra class</option><option value="remedial">Remedial</option><option value="revision">Revision</option><option value="meeting">Meeting</option></select></div>'+field('scheduleStart','Start time','time',true)+field('scheduleEnd','End time','time',true)+field('scheduleTopic','Topic / purpose','text',true)+ta('schedulePurpose','Reason / resources')+'<div id="scheduleStatus" style="display:none"></div>'+btn('createSchedule','Save schedule')+'</form></section><section class="acad-panel"><h3>Saved schedule</h3><div id="scheduleRows"></div></section></div>';
  $('view-schedules').innerHTML=shell('School management','Schedules & Extra Classes','Timetable and supplementary teaching sessions linked to the existing school records.',body);
- $('scheduleForm').onsubmit=saveSchedule;await loadContext();setDefaults();loadSchedules();
+ $('scheduleForm').onsubmit=saveSchedule;await loadContext();setDefaults();const t=await db().from('profiles').select('id,full_name,email').eq('school_id',sid()).eq('role','teacher').eq('status','active').order('full_name').limit(500);if(t.error){status('scheduleStatus',err(t.error),'error');$('scheduleTeacher').innerHTML='<option value="">Could not load teachers</option>';}else{$('scheduleTeacher').innerHTML=opts(t.data||[],'id','full_name','Select assigned teacher');}loadSchedules();
 }
 async function saveSchedule(e){
- e.preventDefault();try{if(!(await permit('manage_schedules'))&&role()!=='teacher')throw new Error('Your role cannot manage schedules.');const c=context(val('scheduleTopic')),d=val('acadDate'),start=val('scheduleStart'),end=val('scheduleEnd');
- if(!c.academic_year_id||!c.class_id||!c.subject_id||!d||!start||!end||start>=end||!c.topic)throw new Error('Complete the required date/class/subject/topic/times.');
- const type=val('scheduleType'),row={school_id:sid(),academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,schedule_date:d,starts_at:start,ends_at:end,topic:c.topic,entry_type:type,status:'scheduled',created_by:u().id};
+ e.preventDefault();try{if(role()==='teacher'||!(await permit('manage_schedules')))throw new Error('Only management with Schedule permission can create a school schedule.');const c=context(val('scheduleTopic')),d=val('acadDate'),start=val('scheduleStart'),end=val('scheduleEnd'),teacherId=val('scheduleTeacher');
+ if(!c.academic_year_id||!c.class_id||!c.subject_id||!d||!start||!end||start>=end||!c.topic||!teacherId)throw new Error('Complete the year, teacher, class, subject, date, topic and times.');
+ const assignments=await db().from('teacher_assignments').select('id,section_id,subject_id').eq('school_id',sid()).eq('teacher_id',teacherId).eq('class_id',c.class_id).eq('is_active',true);if(assignments.error)throw assignments.error;
+ const assigned=(assignments.data||[]).some(a=>(!a.subject_id||a.subject_id===c.subject_id)&&(!a.section_id||a.section_id===c.section_id));
+ if(!assigned)throw new Error('That teacher has no active assignment matching this class, section and subject. Assign the teacher first.');
+ const type=val('scheduleType'),row={school_id:sid(),academic_year_id:c.academic_year_id,teacher_id:teacherId,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,schedule_date:d,starts_at:start,ends_at:end,topic:c.topic,entry_type:type,status:'scheduled',created_by:u().id};
  const a=await db().from('teacher_schedule_entries').insert(row);if(a.error)throw a.error;
- if(type!=='regular'){const b=await db().from('extra_class_records').insert({school_id:sid(),academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,schedule_date:d,starts_at:start,ends_at:end,topic:c.topic,purpose:val('schedulePurpose'),status:'scheduled',created_by:u().id});if(b.error)throw b.error;}
+ if(type!=='regular'){const b=await db().from('extra_class_records').insert({school_id:sid(),academic_year_id:c.academic_year_id,teacher_id:teacherId,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,schedule_date:d,starts_at:start,ends_at:end,topic:c.topic,purpose:val('schedulePurpose'),status:'scheduled',created_by:u().id});if(b.error)throw b.error;}
  status('scheduleStatus','Schedule saved as scheduled—not completed.','success');await loadSchedules();
  }catch(e){status('scheduleStatus',err(e),'error');}
 }
