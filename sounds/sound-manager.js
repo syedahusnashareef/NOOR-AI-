@@ -178,16 +178,16 @@
   function playSound(name, options = {}) {
     const key = String(name || "").trim().toLowerCase();
     if (!key) return false;
-    const tactileEvents = ["soft-buzz","soft-thud","two-note-warning","submit-swoosh","check-tick","sparkle","tada"];
-    if (tactileEvents.includes(key)) vibrate(key === "tada" || key === "sparkle" ? [12, 22, 12] : 12);
-    if ((!options.force && !prefs.masterSound) || prefs.volume <= 0) return false;
     const now = Date.now();
     if (!options.force && now - lastPlayedAt < DEBOUNCE_MS) return false;
     if (lastSoundName === key && now - lastPlayedAt < DEBOUNCE_MS) return false;
-    if (cheerTimer) { window.clearTimeout(cheerTimer); cheerTimer = 0; }
-    if (window.speechSynthesis?.speaking) safeStopSpeech();
     lastPlayedAt = now;
     lastSoundName = key;
+    const tactileEvents = ["soft-buzz","soft-thud","two-note-warning","submit-swoosh","check-tick","sparkle","tada"];
+    if (tactileEvents.includes(key)) vibrate(key === "tada" || key === "sparkle" ? [12, 22, 12] : 12);
+    if ((!options.force && !prefs.masterSound) || prefs.volume <= 0) return false;
+    if (cheerTimer) { window.clearTimeout(cheerTimer); cheerTimer = 0; }
+    if (window.speechSynthesis?.speaking) safeStopSpeech();
     const eventMap = MAP().eventToAsset || {};
     const assetKey = eventMap[key];
     const howl = assetKey ? howls[assetKey] : null;
