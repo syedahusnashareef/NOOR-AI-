@@ -1,6 +1,6 @@
 # NOOR AI Implementation Tracker
 
-Last updated: 2026-10-16
+Last updated: 2026-10-16 (verified live migrations and policy hardening)
 
 This tracker separates live database work from frontend features that are still prototypes or awaiting end-to-end tests.
 
@@ -9,6 +9,7 @@ This tracker separates live database work from frontend features that are still 
 - [x] Confirmed project state ACTIVE_HEALTHY.
 - [x] Connected the unified frontend to the project using a browser-safe publishable key.
 - [x] Confirmed there are no Supabase security-advisor findings after the current migrations.
+- [x] Re-ran the performance advisor: no remaining unindexed-foreign-key or overlapping-permissive-policy findings; unused-index notices remain because the database is empty.
 - [ ] Provision the first trusted Platform Creator account using a secure account-setup process.
 - [ ] Create and verify the first school workspace and its Headmaster account.
 - [ ] Add automated cross-school authorization tests before onboarding real schools.
@@ -30,6 +31,11 @@ This tracker separates live database work from frontend features that are still 
   - school/class assignment checks for attendance
   - task access helper to avoid recursive RLS policy evaluation
   - task assignee validation and foreign-key indexes
+- [x] Added and applied school_role_policy_hardening:
+  - removed permissive legacy policies that allowed teachers to manage school-wide classes/sections
+  - restricted class, section and teacher-assignment management to school leadership
+  - consolidated overlapping profile-update policies
+  - indexed remaining foreign-key paths flagged by the advisor
 - [x] Verified the new tables are present and RLS-enabled.
 - [ ] Mirror the live operational SQL into version-controlled migration files and verify a clean-database replay.
 - [ ] Add automated tests for attendance, task access, role permissions and school isolation.
