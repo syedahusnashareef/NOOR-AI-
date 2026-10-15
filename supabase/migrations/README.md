@@ -12,8 +12,10 @@ The existing schema was inspected before additive migrations were applied. The f
 - `noor_role_membership_and_profile_guard_hardening`
 - `invitation_lifecycle_and_assessment_security`
 - `assessment_context_and_invitation_update_fixes`
+- `assessment_history_and_regrading_permissions`
+- `private_syllabus_source_uploads`
 
-The first three academic/management schema migrations were applied before the current source-parity pass; their exact SQL bodies are not yet mirrored one-to-one in this folder. Do **not** treat this folder as a blank-project bootstrap until all earlier applied migration bodies have been checked into version control. Existing records must be kept.
+The first five academic/management schema migrations were applied before the current source-parity pass; their exact SQL bodies are not yet mirrored one-to-one in this folder. The latest assessment-history and private-upload SQL files are available here. Do **not** treat this folder as a blank-project bootstrap until all earlier applied migration bodies have been checked into version control. Existing records must be kept.
 
 ## Source and deployment rule
 
