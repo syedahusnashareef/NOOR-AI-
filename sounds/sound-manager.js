@@ -23,6 +23,7 @@
   let pendingLoginSound = "";
   let audioContext = null;
   let audioFailure = false;
+  let dbReady = null;
   let speechIndex = 0;
   let lastVoiceAt = 0;
   let toastObserver = null;
@@ -40,7 +41,7 @@
   });
   const storageKey = id => LOCAL_PREFIX + (id || "guest");
   const emit = () => {
-    const detail = { ...prefs, userId, role, syncStatus: supabase ? "connected" : "local" };
+    const detail = { ...prefs, userId, role, syncStatus: supabase ? (dbReady === false ? "local-only" : "connected") : "local" };
     listeners.forEach(fn => { try { fn(detail); } catch (_) {} });
     window.dispatchEvent(new CustomEvent("noor:sound-preferences", { detail }));
   };
@@ -182,7 +183,7 @@
     const howl = assetKey ? howls[assetKey] : null;
     if (howl && howl.state() === "loaded") {
       try {
-        Object.values(howls).forEach(h => { if (h !== howl) h.stop(); });
+        Object.values(howls).forEach(h => { try { h.stop(); } catch (_) {} });
         activeIds.clear();
         howl.volume(0);
         const id = howl.play();
@@ -252,7 +253,8 @@
           haptic_enabled: snapshot.haptics,
           updated_at: new Date().toISOString()
         }, { onConflict: "user_id" });
-        if (result.error) return; /* Local settings remain functional if the migration is not deployed. */
+        if (result.error) { dbReady = false; emit(); return; } /* Local settings remain functional if the migration is not deployed. */
+        dbReady = true;
         emit();
       } catch (_) { /* Audio failures and database failures never block the workspace. */ }
     }, 280);
@@ -261,6 +263,7 @@
     userId = id || null;
     role = nextRole || null;
     supabase = client || null;
+    dbReady = supabase ? null : false;
     const local = readLocal(userId);
     prefs = local?.prefs ? cleanPrefs(local.prefs) : { ...DEFAULTS };
     localUpdatedAt = local?.updatedAt || 0;
@@ -271,13 +274,19 @@
     pendingLoginSound = lastDay === today ? "soft-chime" : "harp-swipe";
     try { localStorage.setItem(DAILY_PREFIX + (userId || "guest"), today); } catch (_) {}
     emit();
+    if (unlocked && pendingLoginSound && prefs.masterSound) {
+      const queued = pendingLoginSound;
+      pendingLoginSound = "";
+      playSound(queued, { force: true, noVoice: true });
+    }
     if (!userId || !supabase) return;
     (async () => {
       try {
         const result = await supabase.from("user_sound_preferences")
           .select("master_sound_enabled,volume,voice_cheers_enabled,haptic_enabled,updated_at")
           .eq("user_id", userId).maybeSingle();
-        if (result.error) return;
+        if (result.error) { dbReady = false; emit(); return; }
+        dbReady = true;
         const remote = result.data;
         if (remote && (!local || (Date.parse(remote.updated_at || "") || 0) > localUpdatedAt)) {
           prefs = cleanPrefs({
@@ -302,6 +311,7 @@
     userId = null;
     role = null;
     supabase = null;
+    dbReady = null;
     pendingLoginSound = "";
     prefs = { ...DEFAULTS };
     applyMaster();
@@ -316,6 +326,8 @@
     document.__noorSoundDelegates = true;
     const getEvent = el => {
       if (!el || el.closest("[data-sound-preview], #soundMasterToggle")) return "";
+      if (el.classList?.contains("sound-switch") && el.querySelector?.("#soundMasterToggle")) return "";
+      if (el.classList?.contains("sound-switch")) return "bubble-pop";
       if (el.dataset?.sound === "none") return "";
       if (el.dataset?.sound) return el.dataset.sound;
       const txt = (el.innerText || el.textContent || el.getAttribute("aria-label") || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -339,7 +351,7 @@
     };
     document.addEventListener("pointerdown", unlock, { capture: true, passive: true });
     document.addEventListener("click", event => {
-      const el = event.target?.closest?.('button,a[role="button"],[role="button"],input[type="checkbox"],input[type="radio"],summary');
+      const el = event.target?.closest?.('button,a[role="button"],[role="button"],.sound-switch,input[type="checkbox"],input[type="radio"],summary');
       if (!el) return;
       if (el.closest("[data-sound-preview], #soundMasterToggle")) return;
       const sound = getEvent(el);
@@ -375,7 +387,7 @@
   window.NOOR_SOUND = {
     playSound, setVolume, mute, unmute, setPreferences, loadUser, clearUser,
     getPreferences: () => ({ ...prefs }),
-    getStatus: () => ({ userId, role, sync: supabase ? "connected" : "local", audioFallback: audioFailure }),
+    getStatus: () => ({ userId, role, sync: supabase ? (dbReady === false ? "local-only" : "connected") : "local", audioFallback: audioFailure }),
     onPreferencesChange: fn => { if (typeof fn === "function") { listeners.add(fn); return () => listeners.delete(fn); } return () => {}; },
     vibrate, cheer, previewVoice,
     unlock
