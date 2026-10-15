@@ -83,7 +83,7 @@
   }
   function preload() {
     const Howl = window.Howl;
-    if (!Howl) { audioFailure = true; return; }
+    if (!Howl) { audioFailure = true; console.warn("[NOOR Sound] Howler did not load; Web Audio fallback will be used where available."); return; }
     for (const [key, payload] of Object.entries(assets)) {
       if (!payload || howls[key]) continue;
       try {
@@ -94,7 +94,7 @@
           volume: 0.9,
           html5: false,
           pool: 2,
-          onloaderror: () => { /* The silent synthesizer fallback covers missing/blocked files. */ }
+          onloaderror: (id, error) => { audioFailure = true; console.warn("[NOOR Sound] Audio asset failed to load; other sounds remain available:", key, error); }
         });
       } catch (_) { audioFailure = true; }
     }
@@ -375,6 +375,8 @@
       return "click";
     };
     document.addEventListener("pointerdown", unlock, { capture: true, passive: true });
+    document.addEventListener("touchstart", unlock, { capture: true, passive: true });
+    document.addEventListener("keydown", unlock, { capture: true });
     document.addEventListener("click", event => {
       const el = event.target?.closest?.('button,a[role="button"],[role="button"],.sound-switch,input[type="checkbox"],input[type="radio"],summary');
       if (!el) return;
