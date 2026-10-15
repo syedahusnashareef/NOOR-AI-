@@ -153,3 +153,36 @@ This section records the latest concrete follow-up changes. The production-facin
 - [ ] Complete full migration-source parity and a clean-database replay. Earlier schema/management migrations still need their exact original SQL mirrored one-to-one; this live project must not be treated as a fully reproducible blank-project bootstrap yet.
 
 **Status remains: implemented and deployed improvements, not final production acceptance.** The application still has no provisioned school/teacher/student data in this project. Browser print/save-as-PDF is used; a server-rendered PDF and native XLSX export are not implemented. OCR supports image uploads only (JPG/PNG/WebP), and email notifications are queued/in-app records until an email provider is configured and delivery is verified.
+
+
+## Ticket 07 — Production-grade school identity and data isolation (16 Oct 2026)
+
+### Implemented and applied to the existing NOOR AI Supabase project
+- [x] Added school address, official email, contact phone, school verification status, account status, verified-by/at fields and owner user ID. Existing UUID school IDs remain internal identifiers and are guarded against mutation.
+- [x] Added a private platform-admin allow-list. The legacy `creator` profile label no longer grants global school access by itself; platform access requires an explicit row in `private.platform_admins` plus an active `creator` profile.
+- [x] Tightened shared authorization helpers so non-platform users need an explicit active school membership whose role matches the profile. No more “no membership row means allow” fallback.
+- [x] School-owned reads and management helpers now require a verified, active school and a matching active membership. Teacher access also requires an active class/section/subject assignment.
+- [x] Student signup remains role-fixed to student and only activates membership when the school is verified/active, the code matches, class and section are valid, and Auth email is confirmed. Otherwise the profile stays pending with no active membership.
+- [x] Added school identity/context validation, scoped username/employee-ID uniqueness, student admission/roll uniqueness in school/year/class/section context, and indexes for new foreign keys.
+- [x] Added database guards for immutable school IDs/creator, platform-only school verification and official-email attestation, protected code rotation, membership identity, membership role changes and leadership membership status.
+- [x] Owner registration now records official address/email/contact and creates a pending school. Access stays restricted until platform administration independently verifies the official email and approves the school.
+- [x] Existing password login and recovery continue to use Supabase Auth; the UI now checks platform allow-list status and strict membership before exposing the workspace. Pending/unverified users see a restricted status screen.
+- [x] Added executable database smoke tests at `supabase/tests/ticket07_security.sql`.
+- [x] Synced the updated existing `index.html` to the GitHub Pages branch.
+
+### Live checks actually run
+- [x] Database smoke-test DO block executed successfully: no-auth platform-admin check, random school/class permission checks, anonymous RPC privilege checks, RLS coverage, and uniqueness-index presence.
+- [x] RLS catalog query: 35 public base tables, 0 with RLS disabled.
+- [x] Security Advisor after changes: no WARN/ERROR findings. One INFO finding remains because `private.platform_admins` intentionally has RLS enabled with no client policies and no direct client grants.
+- [x] Public owner-creation, invitation-acceptance and platform-status RPC wrappers are invoker-based; anonymous EXECUTE is denied.
+- [x] JavaScript syntax check passed for both inline script blocks in the updated main branch.
+- [x] Verified all four Ticket 07 migrations are recorded in the live Supabase migration history.
+
+### Not yet proven / production blockers
+- [ ] There are currently zero Auth users, profiles, schools and school memberships in this project. Therefore cross-school tests with real School A/School B accounts, promotion attempts, removal/re-login, and invitation expiry/reuse could not be run honestly.
+- [ ] The first Platform Creator account must be bootstrapped securely by the project owner: create and verify the account through Supabase Auth, then set its profile role to `creator` and insert its Auth user ID into `private.platform_admins` using the Supabase SQL Editor under trusted project-owner access. Never expose this bootstrap to public signup or frontend code.
+- [ ] The school “Mark email verified” control records an authorised human attestation after independent verification; it is not an automatic email challenge. A real email verification provider/workflow is still required for fully automated proof.
+- [ ] Supabase Auth dashboard settings for email confirmations, password policy, rate limits and JWT/session lifetime still need an explicit production review; those settings were not readable/changed through the available connector.
+- [ ] Clean-database replay of the full historical migration chain and real browser/API/storage end-to-end tests remain outstanding. This is not yet a production acceptance sign-off.
+
+**Status: security hardening deployed and smoke-tested; real multi-account acceptance tests are blocked until a trusted Platform Creator is provisioned and two test schools have data.**
