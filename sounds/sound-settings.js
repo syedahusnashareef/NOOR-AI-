@@ -68,7 +68,7 @@
       if (key === "voice") {
         if (!manager()?.getPreferences?.().masterSound) return;
         manager()?.previewVoice?.();
-      } else if (key === "haptic") {
+      } else if (key === "haptic" || key === "haptics") {
         manager()?.vibrate?.([12, 22, 12]);
         if (manager()?.getPreferences?.().masterSound) manager()?.playSound?.("bubble-pop");
       } else {
