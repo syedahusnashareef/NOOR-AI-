@@ -46,3 +46,13 @@ The deployed Edge Function is `noor-ai-academic-assistant`. Configure these thro
 - `AI_INPUT_COST_PER_1K_USD`, `AI_OUTPUT_COST_PER_1K_USD` — optional rate configuration for estimated usage costs.
 
 The function intentionally reports a configuration error when no provider key is configured. That is safer than pretending AI output has been generated.
+
+
+## Ticket 07 applied migrations
+The following versions are recorded in the live project and their SQL source is checked in:
+- `20261015202058_ticket07_secure_school_identity_and_membership_isolation.sql`
+- `20261015202237_ticket07_verified_signup_and_school_approval_guard.sql`
+- `20261015203107_ticket07_owner_onboarding_and_rpc_hardening.sql`
+- `20261015203803_ticket07_protect_school_verification_and_leadership_memberships.sql`
+
+The database test smoke script is `supabase/tests/ticket07_security.sql`. The private platform-admin allow-list intentionally has no client-facing RLS policy or direct table grants. Bootstrap a trusted platform administrator only from the Supabase SQL Editor under project-owner access after verifying the Auth account; never from public signup.
