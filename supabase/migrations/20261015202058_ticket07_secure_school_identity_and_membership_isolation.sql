@@ -250,7 +250,10 @@ BEGIN
  SELECT role INTO v_actor_role FROM public.profiles WHERE id=(SELECT auth.uid()) AND status='active';
  IF TG_OP='INSERT' THEN
   IF NEW.created_by IS DISTINCT FROM (SELECT auth.uid()) THEN RAISE EXCEPTION 'Invitation creator must be the signed-in user' USING errcode='42501'; END IF;
-  IF NEW.role IN ('principal','manager') AND v_actor_role NOT IN ('creator','owner') THEN RAISE EXCEPTION 'Only Owner can appoint a Principal/Manager' USING errcode='42501'; END IF;
+  IF NEW.role='owner' AND NOT private.is_creator() THEN RAISE EXCEPTION 'Only platform administration can issue the first owner invitation' USING errcode='42501'; END IF;
+  IF NEW.role IN ('principal','manager') AND NOT (private.is_creator() OR EXISTS(
+   SELECT 1 FROM public.school_memberships m WHERE m.school_id=NEW.school_id AND m.user_id=(SELECT auth.uid()) AND m.role='owner' AND m.status='active'
+  )) THEN RAISE EXCEPTION 'Only platform administration or the active school owner can appoint a Principal/Manager' USING errcode='42501'; END IF;
  ELSE
   IF NEW.school_id IS DISTINCT FROM OLD.school_id OR NEW.role IS DISTINCT FROM OLD.role OR NEW.invited_email IS DISTINCT FROM OLD.invited_email
    OR NEW.invited_name IS DISTINCT FROM OLD.invited_name OR NEW.token_hash IS DISTINCT FROM OLD.token_hash OR NEW.created_by IS DISTINCT FROM OLD.created_by
@@ -281,14 +284,23 @@ BEGIN
   RAISE EXCEPTION 'Invitation is invalid, expired, revoked or already used' USING errcode='42501';
  END IF;
  IF v_inv.invited_email IS NOT NULL AND lower(v_inv.invited_email)<>lower(v_email) THEN RAISE EXCEPTION 'This invitation belongs to a different email address' USING errcode='42501'; END IF;
- IF v_inv.role='owner' THEN RAISE EXCEPTION 'Owner accounts are created through the verified new-school flow' USING errcode='42501'; END IF;
- IF v_inv.role IN ('principal','manager') AND NOT EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=v_inv.created_by AND
-  (p.role='creator' OR (p.role='owner' AND EXISTS(SELECT 1 FROM public.school_memberships m WHERE m.school_id=v_inv.school_id AND m.user_id=p.id AND m.role='owner' AND m.status='active')))) THEN
-  RAISE EXCEPTION 'Only the platform creator or active School Owner can appoint a Principal/Manager' USING errcode='42501';
+ IF NOT EXISTS(SELECT 1 FROM public.schools s WHERE s.id=v_inv.school_id AND s.is_active AND s.verification_status='verified' AND s.account_status='active') THEN
+  RAISE EXCEPTION 'This school is not yet approved for account onboarding' USING errcode='42501';
  END IF;
+ IF v_inv.role='owner' THEN
+  IF NOT private.is_platform_admin_user(v_inv.created_by) OR EXISTS(SELECT 1 FROM public.school_memberships m WHERE m.school_id=v_inv.school_id AND m.role='owner' AND m.status='active') THEN
+   RAISE EXCEPTION 'The first owner must be invited by authorised platform administration and no active owner may already exist' USING errcode='42501';
+  END IF;
+ ELSIF v_inv.role IN ('principal','manager') AND NOT (private.is_platform_admin_user(v_inv.created_by) OR EXISTS(
+  SELECT 1 FROM public.school_memberships m WHERE m.school_id=v_inv.school_id AND m.user_id=v_inv.created_by AND m.role='owner' AND m.status='active'
+ )) THEN
+  RAISE EXCEPTION 'Only authorised platform administration or the active School Owner can appoint a Principal/Manager' USING errcode='42501';
+ END IF;
+ IF EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=v_user AND p.status='inactive') THEN RAISE EXCEPTION 'This account is suspended; contact an authorised administrator' USING errcode='42501'; END IF;
  IF EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=v_user AND p.school_id IS NOT NULL AND p.school_id<>v_inv.school_id) THEN
   RAISE EXCEPTION 'This account already belongs to another primary school. Multi-school profile switching is not configured.' USING errcode='42501';
  END IF;
+ IF v_inv.role='owner' AND EXISTS(SELECT 1 FROM public.profiles p WHERE p.id=v_user AND p.role='creator') THEN RAISE EXCEPTION 'Platform administration accounts cannot be converted into school-owner accounts' USING errcode='42501'; END IF;
  IF v_username IS NOT NULL AND (length(v_username)<3 OR length(v_username)>40 OR v_username !~ '^[A-Za-z0-9._-]+$') THEN
   RAISE EXCEPTION 'Choose a valid username: 3–40 letters, numbers, dot, underscore or dash' USING errcode='22023';
  END IF;
@@ -312,6 +324,7 @@ BEGIN
  VALUES(v_inv.school_id,v_user,v_inv.role,'active',v_username,now())
  ON CONFLICT(school_id,user_id) DO UPDATE SET role=excluded.role,status='active',username=excluded.username,removed_at=NULL,
  removed_by=NULL,removal_reason=NULL,joined_at=now(),updated_at=now();
+ IF v_inv.role='owner' THEN UPDATE public.schools SET owner_user_id=v_user WHERE id=v_inv.school_id; END IF;
  INSERT INTO public.administrative_audit_logs(school_id,actor_id,target_user_id,action,metadata)
  VALUES(v_inv.school_id,v_user,v_user,'school_invitation_accepted',jsonb_build_object('invitation_id',v_inv.id,'role',v_inv.role,'username',v_username));
  RETURN jsonb_build_object('school_id',v_inv.school_id,'role',v_inv.role,'school_name',(SELECT name FROM public.schools WHERE id=v_inv.school_id),'username',v_username);
