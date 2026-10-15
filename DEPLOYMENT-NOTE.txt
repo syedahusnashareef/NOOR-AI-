@@ -1,0 +1,3 @@
+NOOR AI — Static Preview
+
+This GitHub Pages branch is a visual demo only. It has no production authentication, database persistence, real email delivery, or live AI/OCR integration. Do not enter real student or guardian information.
