@@ -131,7 +131,7 @@ html.noor-reduced-motion *::after {
 .noor-theme-check { display:flex; align-items:center; gap:9px; min-height:42px; color:var(--ink); font-size:12px; font-weight:700; }
 .noor-theme-check input { accent-color:var(--berry); width:17px; height:17px; }
 .noor-theme-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:17px; }
-.noor-theme-reset { border:1px solid var(--line); border-radius:10px; padding:10px 14px; background:transparent; color:var(--ink); font:700 12px inherit; cursor:pointer; }
+.noor-theme-reset { border:1px solid var(--line); border-radius:10px; padding:10px 14px; background:transparent; color:var(--ink); font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; }
 .noor-theme-caption { margin-top:12px; color:var(--muted); font-size:11px; line-height:1.6; }
 @media(max-width:920px) { .noor-theme-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .noor-theme-options { grid-template-columns:1fr 1fr; } }
 @media(max-width:520px) { .noor-theme-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; } .noor-theme-card { padding:7px; } .noor-theme-card[aria-pressed="true"] { padding:6px; } .noor-theme-preview { grid-template-columns:25px minmax(0,1fr); height:62px; } .noor-theme-options { grid-template-columns:1fr; } }
