@@ -1,0 +1,309 @@
+/* NOOR AI School Command Centre. Loaded into the existing authenticated NOOR AI workspace. */
+(() => {
+'use strict';
+const A=()=>window.NOOR_AI_APP||{}, db=()=>A().db, user=()=>A().user, profile=()=>A().profile, schoolId=()=>A().schoolId;
+const $=id=>document.getElementById(id), E=v=>(A().escapeHtml||((x)=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))))(v??'');
+const msg=(s,t='info')=>A().toast?A().toast(s,t):alert(s);
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const fmt=d=>d?new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'Not set';
+const localInput=d=>{if(!d)return '';const x=new Date(d.getTime?d:new Date(d));x.setMinutes(x.getMinutes()-x.getTimezoneOffset());return x.toISOString().slice(0,16);};
+const btn=(id,label,cl='')=>'<button type="button" class="cc-btn '+cl+'" id="'+id+'">'+E(label)+'</button>';
+const field=(id,label,type='text',required=false,extra='')=>'<div class="cc-field"><label for="'+id+'">'+E(label)+(required?' *':'')+'</label><input id="'+id+'" type="'+type+'" '+(required?'required ':'')+extra+'></div>';
+const ta=(id,label,required=false)=>'<div class="cc-field"><label for="'+id+'">'+E(label)+(required?' *':'')+'</label><textarea id="'+id+'" '+(required?'required':'')+'></textarea></div>';
+const sel=(id,label,opts,required=false)=>'<div class="cc-field"><label for="'+id+'">'+E(label)+(required?' *':'')+'</label><select id="'+id+'" '+(required?'required':'')+'>'+opts.map(o=>'<option value="'+E(o[0])+'">'+E(o[1])+'</option>').join('')+'</select></div>';
+const v=id=>$(id)?.value?.trim?.()||'';
+const listEmpty=s=>'<div class="cc-empty">'+E(s)+'</div>';
+const chip=(s,c='')=>'<span class="cc-chip '+c+'">'+E(s)+'</span>';
+const table=(heads,rows)=>rows.length?'<div class="cc-table-wrap"><table class="cc-table"><thead><tr>'+heads.map(h=>'<th>'+E(h)+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>':listEmpty('No saved records match this view yet.');
+const ROLE_ALLOWED=['owner','principal']; const ROUTES=['command-centre','school-tasks','school-calendar','email-automation'];
+const WIDGETS=[
+ ['student_count','Students & enrolments','Live authorised student profiles'],['staff_count','Teachers & staff','Active school staff records'],['attendance','Today’s attendance','Attendance sessions and marked records'],['class_attendance','Class attendance','Class and section attendance summary'],['academic','Academic performance','Recorded assessment results and exam schedule'],['syllabus','Syllabus progress','Existing syllabus units and progress records'],['reports','Teaching reports','Daily report submission status'],['approvals','Pending approvals','Pending student records and existing approval work'],['upcoming','Upcoming events & exams','Saved calendar and assessment records'],['tasks','Tasks & deadlines','Open, overdue and approaching school tasks'],['notices','Announcements','Active school notices'],['email','Email status','Provider-backed email log status'],['intelligence','School intelligence','Facts and recommendations grounded in records'],['fees_planned','Fee management (planned)','Not active; no collection or dues metrics']
+];
+const DEFAULT={widgets:['student_count','staff_count','attendance','class_attendance','tasks','upcoming','reports','syllabus','notices','intelligence'],hidden:[],sizes:{},dateRange:'7d'};
+const S={prefs:structuredClone(DEFAULT),catalog:[],staff:[],tasks:[],assignees:[],events:[],notices:[],reports:[],units:[],progress:[],assessments:[],logs:[],templates:[],rules:[],classes:[],sections:[],calendarMode:'week',calendarDate:new Date(),editTask:null,editEvent:null,managerAllowed:false};
+const hasSchool=()=>Boolean(db()&&user()&&profile()&&schoolId());
+async function permitted(){
+ if(!hasSchool())return false;
+ if(ROLE_ALLOWED.includes(profile().role)||profile().role==='creator')return true;
+ if(profile().role!=='manager')return false;
+ const r=await db().from('role_permissions').select('permission_key,is_allowed').eq('school_id',schoolId()).eq('role','manager').in('permission_key',['manage_dashboard','manage_tasks','manage_meetings','manage_email_automation','view_academic_reports']);
+ S.managerAllowed=!r.error&&(r.data||[]).some(x=>x.is_allowed);
+ return S.managerAllowed;
+}
+function ensureViews(){
+ const content=document.querySelector('.content');if(!content)return;
+ for(const id of ROUTES){if(!$('view-'+id)){const el=document.createElement('section');el.id='view-'+id;el.className='view';content.appendChild(el);}}
+}
+let menuBusy=false;
+async function ensureNav(){
+ const nav=$('mainNav');if(!nav||menuBusy||!hasSchool())return;
+ menuBusy=true;
+ try{
+  const ok=await permitted();const wanted=ok?[
+   ['command-centre','⌘','School Command Centre'],['school-tasks','✓','Tasks & Deadlines'],['school-calendar','▦','School Calendar'],['email-automation','✉','Email Automation']
+  ]:[];
+  nav.querySelectorAll('[data-cc-nav="1"]').forEach(n=>n.remove());
+  const anchor=nav.querySelector('[data-view="overview"]');
+  let cursor=anchor;
+  for(const [id,icon,label] of wanted){const b=document.createElement('button');b.type='button';b.dataset.view=id;b.dataset.ccNav='1';b.innerHTML='<span class="ico">'+icon+'</span><span>'+label+'</span>';b.addEventListener('click',()=>A().openView?.(id));if(cursor?.parentElement===nav){cursor.after(b);cursor=b;}else nav.appendChild(b);}
+  ensureViews();
+ }catch(e){console.warn('Command Centre navigation',e);}finally{menuBusy=false;}
+}
+async function personalPref(){
+ if(!hasSchool())return;
+ const [school,personal]=await Promise.all([
+  db().from('school_dashboard_preferences').select('layout_json').eq('school_id',schoolId()).eq('scope','school').maybeSingle(),
+  db().from('school_dashboard_preferences').select('layout_json').eq('school_id',schoolId()).eq('scope','personal').eq('user_id',user().id).maybeSingle()
+ ]);
+ let raw=personal.data?.layout_json||school.data?.layout_json;
+ if(raw&&typeof raw==='object')S.prefs={...structuredClone(DEFAULT),...raw,widgets:Array.isArray(raw.widgets)?raw.widgets.filter(id=>WIDGETS.some(w=>w[0]===id)):DEFAULT.widgets.slice(),hidden:Array.isArray(raw.hidden)?raw.hidden:[],sizes:raw.sizes&&typeof raw.sizes==='object'?raw.sizes:{}};
+}
+async function savePref(scope='personal'){
+ const row={school_id:schoolId(),user_id:scope==='personal'?user().id:null,scope,layout_json:S.prefs};
+ if(scope==='school'&&!(ROLE_ALLOWED.includes(profile().role)||profile().role==='creator'))throw new Error('Only authorised school leadership can save the school default layout.');
+ const keyQuery=db().from('school_dashboard_preferences').select('id').eq('school_id',schoolId()).eq('scope',scope);
+ const existing=scope==='personal'?await keyQuery.eq('user_id',user().id).maybeSingle():await keyQuery.maybeSingle();
+ if(existing.error)throw existing.error;
+ const r=existing.data?.id?await db().from('school_dashboard_preferences').update({layout_json:S.prefs}).eq('id',existing.data.id):await db().from('school_dashboard_preferences').insert(row);
+ if(r.error)throw r.error;
+ msg(scope==='school'?'School default layout saved for this school.':'Your dashboard layout is saved to Supabase.','success');
+}
+async function loadData(){
+ const sid=schoolId(),d=db(),date=today(),now=new Date().toISOString(),next=new Date(Date.now()+30*86400000).toISOString(),week=new Date(Date.now()+7*86400000).toISOString();
+ const tasksQ=d.from('school_tasks').select('id,title,description,task_type,priority,status,class_id,section_id,starts_at,due_at,reminder_at,checklist,recurrence,created_by,created_at,completed_at').eq('school_id',sid).order('due_at',{ascending:true}).limit(300);
+ const eventsQ=d.from('calendar_events').select('id,title,description,event_type,starts_at,ends_at,location,class_id,section_id,status,recurrence,reminder_minutes,created_by').eq('school_id',sid).order('starts_at',{ascending:true}).limit(300);
+ const tasks=await tasksQ; if(!tasks.error)S.tasks=tasks.data||[];
+ const staff=await d.from('profiles').select('id,full_name,email,role,status,class_id,section_id').eq('school_id',sid).eq('status','active').in('role',['teacher','manager','principal','owner']).order('full_name').limit(1000);if(!staff.error)S.staff=staff.data||[];
+ const [ass,events,notices,reports,units,progress,exams,logs,templates,rules,classes,sections,students,teachers,approvals,attendanceSessions]=await Promise.all([
+  d.from('task_assignees').select('id,task_id,assignee_id,status,response,status_updated_at').eq('school_id',sid).limit(1000),
+  eventsQ,
+  d.from('school_notices').select('id,title,body,target_roles,starts_at,ends_at,is_active,created_at').eq('school_id',sid).eq('is_active',true).order('starts_at',{ascending:false}).limit(50),
+  d.from('daily_teaching_reports').select('id,teacher_id,report_date,report_status,topic_taught,submitted_at,class_id,section_id,subject_id').eq('school_id',sid).eq('report_date',date).limit(1000),
+  d.from('syllabus_units').select('id,title,subject_id,class_id,section_id,syllabus_weight').eq('school_id',sid).eq('is_active',true).limit(1500),
+  d.from('syllabus_progress').select('id,syllabus_unit_id,progress_status,teacher_reported_percentage,updated_at,class_id,section_id,subject_id').eq('school_id',sid).limit(1500),
+  d.from('school_assessments').select('id,title,assessment_type,assessment_date,status,class_id,section_id,subject_id').eq('school_id',sid).gte('assessment_date',date).lte('assessment_date',next.slice(0,10)).order('assessment_date').limit(100),
+  d.from('school_email_delivery_logs').select('id,recipient_email,subject,status,attempt_count,error_summary,created_at,accepted_at,delivered_at').eq('school_id',sid).order('created_at',{ascending:false}).limit(100),
+  d.from('school_email_templates').select('id,name,category,subject,body_html,is_enabled,created_at').eq('school_id',sid).order('created_at',{ascending:false}).limit(100),
+  d.from('school_automation_rules').select('id,name,trigger_type,action_type,is_enabled,timezone,created_at').eq('school_id',sid).order('created_at',{ascending:false}).limit(100),
+  d.from('classes').select('id,name,is_active').eq('school_id',sid).eq('is_active',true).order('sort_order'),
+  d.from('sections').select('id,class_id,name,is_active').eq('is_active',true).order('name'),
+  d.from('profiles').select('id,status',{count:'exact',head:true}).eq('school_id',sid).eq('role','student'),
+  d.from('profiles').select('id,status',{count:'exact',head:true}).eq('school_id',sid).eq('role','student').eq('status','active'),
+  d.from('profiles').select('id,status',{count:'exact',head:true}).eq('school_id',sid).eq('role','student').eq('status','pending'),
+  d.from('attendance_sessions').select('id,class_id,section_id,attendance_date,status').eq('school_id',sid).eq('attendance_date',date).limit(1000)
+ ]);
+ if(!ass.error)S.assignees=ass.data||[];if(!events.error)S.events=events.data||[];if(!notices.error)S.notices=notices.data||[];if(!reports.error)S.reports=reports.data||[];if(!units.error)S.units=units.data||[];if(!progress.error)S.progress=progress.data||[];if(!exams.error)S.assessments=exams.data||[];if(!logs.error)S.logs=logs.data||[];if(!templates.error)S.templates=templates.data||[];if(!rules.error)S.rules=rules.data||[];if(!classes.error)S.classes=classes.data||[];if(!sections.error)S.sections=sections.data||[];
+ const sessIds=(attendanceSessions.data||[]).map(x=>x.id);let attendance=[];
+ if(sessIds.length){const a=await d.from('attendance_records').select('id,status,session_id,student_id').eq('school_id',sid).in('session_id',sessIds).limit(5000);if(!a.error)attendance=a.data||[];}
+ const roleCount=await d.from('profiles').select('id',{count:'exact',head:true}).eq('school_id',sid).eq('status','active').in('role',['teacher','manager','principal','owner']);
+ S.data={
+  studentTotal:students.count||0,activeStudents:teachers.count||0,pendingStudents:approvals.count||0,
+  staffTotal:roleCount.count||0,attendanceSessions:attendanceSessions.data||[],attendance,
+  present:attendance.filter(x=>x.status==='present').length,absent:attendance.filter(x=>x.status==='absent').length,
+  attendanceMarked:attendance.length,attendanceMissing:(attendanceSessions.data||[]).filter(x=>x.status==='draft').length,
+  overdue:S.tasks.filter(t=>t.due_at&&t.due_at<now&&!['completed','cancelled','archived'].includes(t.status)),
+  dueSoon:S.tasks.filter(t=>t.due_at&&t.due_at>=now&&t.due_at<=week&&!['completed','cancelled','archived'].includes(t.status)),
+  upcomingEvents:S.events.filter(e=>e.status!=='cancelled'&&e.starts_at>=now&&e.starts_at<=next),
+  upcomingExams:S.assessments.filter(e=>e.assessment_type==='exam'||e.assessment_type==='test'),
+  completedUnits:S.progress.filter(x=>x.progress_status==='completed').length,
+  totalUnits:S.units.length,missingReports: Math.max(0,(S.staff.filter(x=>x.role==='teacher').length)-new Set(S.reports.filter(x=>['submitted','reviewed','approved'].includes(x.report_status)).map(x=>x.teacher_id)).size),
+  totalReports:S.reports.length,submittedReports:S.reports.filter(x=>['submitted','reviewed','approved'].includes(x.report_status)).length,
+  schoolId:sid, loadedAt:new Date().toISOString()
+ };
+ return S.data;
+}
+function shell(id,eyebrow,title,desc,actions=''){
+ return '<div class="cc-page"><section class="cc-hero"><div class="cc-hero-row"><div><div class="eyebrow">'+E(eyebrow)+'</div><h1>'+E(title)+'</h1><p>'+E(desc)+'</p></div>'+chip(profile()?.role||'Authenticated')+'</div><div class="cc-hero-actions">'+actions+'</div></section><div id="'+id+'-body"><div class="cc-empty">Loading live school records…</div></div></div>';
+}
+function metric(label,value,note=''){
+ return '<div class="cc-metric"><span>'+E(label)+'</span><strong>'+E(value)+'</strong><small>'+E(note)+'</small></div>';
+}
+function widgetMarkup(id,data){
+ const title=(WIDGETS.find(w=>w[0]===id)||[id,id,''])[1],note=(WIDGETS.find(w=>w[0]===id)||['','',''])[2];
+ let body='',wide=false;
+ if(id==='student_count') body='<div class="cc-metrics">'+metric('All registered students',data.studentTotal,'Existing student profiles')+metric('Active enrolments',data.activeStudents,'Active student accounts')+metric('Pending approval',data.pendingStudents,'Awaiting school review')+'</div>';
+ else if(id==='staff_count')body='<div class="cc-metrics">'+metric('Active staff',data.staffTotal,'Teachers and leadership accounts')+metric('Teachers',S.staff.filter(x=>x.role==='teacher').length,'Active teacher profiles')+metric('Staff list',S.staff.length,'Records returned within your scope')+'</div>';
+ else if(id==='attendance')body='<div class="cc-metrics">'+metric('Marked today',data.attendanceMarked,'Attendance records saved today')+metric('Present',data.present,'Marked present')+metric('Absent',data.absent,'Marked absent')+'</div><p class="cc-muted">'+(data.attendanceSessions.length?data.attendanceSessions.length+' attendance session(s); '+data.attendanceMissing+' still in draft.':'No attendance sessions recorded for today.')+'</p>';
+ else if(id==='class_attendance'){wide=true;body=data.attendanceSessions.length?'<div class="cc-line-list">'+data.attendanceSessions.map(s=>{const rows=data.attendance.filter(r=>r.session_id===s.id),klass=S.classes.find(c=>c.id===s.class_id),sec=S.sections.find(c=>c.id===s.section_id);const present=rows.filter(r=>r.status==='present').length,pct=rows.length?Math.round(100*present/rows.length):0;return '<div><div class="cc-toolbar"><b>'+E(klass?.name||'Class')+(sec?' · '+E(sec.name):'')+'</b>'+chip(s.status==='submitted'?'Submitted':s.status,'warn')+'</div><div class="cc-bar"><i style="width:'+pct+'%"></i></div><small class="cc-muted">'+present+' present / '+rows.filter(r=>r.status==='absent').length+' absent / '+rows.length+' marked</small></div>';}).join('')+'</div>':listEmpty('No class attendance sessions were saved for today.')};
+ else if(id==='tasks'){const rows=[...data.overdue.slice(0,4),...data.dueSoon.filter(t=>!data.overdue.some(o=>o.id===t.id)).slice(0,3)];body='<div class="cc-metrics">'+metric('Overdue',data.overdue.length,'Open tasks past deadline')+metric('Due in 7 days',data.dueSoon.length,'Not completed or cancelled')+metric('All open',S.tasks.filter(t=>!['completed','cancelled','archived'].includes(t.status)).length,'In this school scope')+'</div><div class="cc-line-list" style="margin-top:12px">'+(rows.length?rows.map(t=>'<div class="cc-list-item"><div><b>'+E(t.title)+'</b><small>'+(t.due_at?'Due '+E(fmt(t.due_at)):'No deadline')+' · '+E(t.status)+'</small></div>'+chip(t.priority,t.priority==='urgent'||t.priority==='high'?'bad':'')+'</div>').join(''):listEmpty('No overdue or approaching task deadlines in saved records.'))+'</div><div class="cc-row" style="margin-top:12px">'+btn('cc-open-tasks','Manage tasks','primary')+'</div>'};
+ else if(id==='upcoming'){wide=true;const rows=[...data.upcomingEvents.map(e=>({title:e.title,date:e.starts_at,type:e.event_type,detail:e.location||e.description||''})),...S.assessments.map(e=>({title:e.title,date:e.assessment_date,type:e.assessment_type,detail:S.classes.find(c=>c.id===e.class_id)?.name||''}))].sort((a,b)=>new Date(a.date)-new Date(b.date).getTime()).slice(0,8);body=rows.length?'<div class="cc-line-list">'+rows.map(e=>'<div class="cc-list-item"><div><b>'+E(e.title)+'</b><small>'+E(fmt(e.date))+' · '+E(e.type||'event')+(e.detail?' · '+E(e.detail):'')+'</small></div>'+chip('Upcoming')+'</div>').join('')+'</div>':listEmpty('No upcoming calendar events or assessments are saved for the next 30 days.')};
+ else if(id==='reports')body='<div class="cc-metrics">'+metric('Reports today',data.totalReports,'Teacher daily report records')+metric('Submitted / reviewed',data.submittedReports,'Recorded submission status')+metric('No submitted report',data.missingReports,'Active teachers not represented in submitted reports')+'</div><p class="cc-muted">The final number is a simple gap indicator, not a judgement. Teachers with no scheduled lesson or approved leave may need no report.</p>';
+ else if(id==='syllabus'){const pct=data.totalUnits?Math.round(100*data.completedUnits/data.totalUnits):0;body='<div class="cc-metrics">'+metric('Active syllabus units',data.totalUnits,'From the existing syllabus')+metric('Completed units',data.completedUnits,'Progress status = completed')+metric('Completion',data.totalUnits?pct+'%':'—',data.totalUnits?'Derived from saved progress':'No active syllabus units found')+'</div><div class="cc-bar"><i style="width:'+pct+'%"></i></div><p class="cc-muted">Progress values are based only on existing syllabus records.</p>'};
+ else if(id==='academic'){wide=true;body='<div class="cc-metrics">'+metric('Upcoming assessments',S.assessments.length,'Next 30 days')+metric('Exams / tests',data.upcomingExams.length,'Saved exam and test schedule')+metric('Results', 'Open academic module','No synthetic score average is shown')+'</div><p class="cc-muted">Assessment results and averages remain inside the existing academic module so that no score is inferred without an approved reporting definition.</p>'};
+ else if(id==='approvals')body='<div class="cc-metrics">'+metric('Student approvals',data.pendingStudents,'Pending student profiles')+metric('Other approvals','Not configured','No leave-approval table is currently wired')+'</div>';
+ else if(id==='notices'){wide=true;body=S.notices.length?'<div class="cc-line-list">'+S.notices.slice(0,5).map(n=>'<div class="cc-list-item"><div><b>'+E(n.title)+'</b><small>'+E(n.body||'')+'</small><small>Audience: '+E((n.target_roles||[]).join(', ')||'Configured roles')+' · '+E(fmt(n.starts_at||n.created_at))+'</small></div>'+chip('Active','good')+'</div>').join('')+'</div>':listEmpty('No active school announcements were found.')};
+ else if(id==='email'){body='<div class="cc-metrics">'+metric('Sent / accepted',S.logs.filter(x=>x.status==='sent').length,'Accepted by provider, not confirmed inbox delivery')+metric('Failed',S.logs.filter(x=>x.status==='failed').length,'Delivery attempts logged as failed')+metric('Queued',S.logs.filter(x=>x.status==='queued').length,'Not yet reported as sent')+'</div><div class="cc-row" style="margin-top:12px">'+btn('cc-open-email','View email automation','primary')+'</div>'};
+ else if(id==='intelligence'){wide=true;body='<p class="cc-muted">Summarise the school’s real task, attendance, reporting, syllabus and event data. The server labels verified facts separately from recommendations.</p><div class="cc-note">Report period: today ('+E(today())+') and the next 30 calendar days. Select “Generate insights” for an evidence-backed review.</div><div class="cc-row" style="margin-top:12px">'+btn('cc-generate-insights','Generate insights','primary')+btn('cc-open-intelligence','Open intelligence detail')+'</div><div id="cc-insight-preview" style="margin-top:12px"></div>'};
+ else if(id==='fees_planned'){wide=true;body='<div class="cc-note warn"><b>Planned functionality — not active.</b><br>Fee collection, invoice balances and outstanding dues are not shown because the complete Fee Management module has not been implemented.</div>'}
+ const included=S.prefs.widgets.includes(id),hidden=(S.prefs.hidden||[]).includes(id),size=S.prefs.sizes?.[id]||'normal';
+ if(!included)return '';
+ return '<article class="cc-widget '+(size==='wide'?'wide':'')+(hidden?' is-hidden':'')+'" data-widget="'+id+'" draggable="true"><div class="cc-widget-head"><div><h3>'+E(title)+'</h3><p>'+E(note)+'</p></div><div class="cc-widget-actions"><button class="cc-icon-btn" title="Hide/show widget" aria-label="Hide or show '+E(title)+'" data-cc-hide="'+id+'">'+(hidden?'◉':'◌')+'</button><button class="cc-icon-btn" title="Resize widget" aria-label="Resize '+E(title)+'" data-cc-size="'+id+'">'+(size==='wide'?'↙':'↗')+'</button><button class="cc-icon-btn" title="Remove from layout" aria-label="Remove '+E(title)+'" data-cc-remove="'+id+'">×</button></div></div>'+body+'</article>';
+}
+async function renderDashboard(){
+ if(!hasSchool())return;
+ ensureViews();$('view-command-centre').innerHTML=shell('command-centre','School leadership','School Command Centre','One operational view for saved student, staff, attendance, academic, task and communication records. Widget layout is personal and saved per school.',btn('cc-refresh','Refresh data','primary')+btn('cc-manage-widgets','Customise widgets')+btn('cc-reset','Restore default')+((ROLE_ALLOWED.includes(profile().role)||profile().role==='creator')?btn('cc-save-school-default','Save school default','gold'):''));
+ const target=$('command-centre-body');target.innerHTML='<div class="cc-empty">Loading school records…</div>';
+ try{
+  await personalPref();const data=await loadData();
+  const hero=$('view-command-centre').querySelector('.cc-hero-actions');if(hero)hero.innerHTML=btn('cc-refresh','Refresh data','primary')+btn('cc-manage-widgets','Customise widgets')+btn('cc-reset','Restore default')+((ROLE_ALLOWED.includes(profile().role)||profile().role==='creator')?btn('cc-save-school-default','Save school default','gold'):'');
+  target.innerHTML='<div class="cc-toolbar"><div><h2>Operational overview</h2><p class="cc-muted">'+E(fmt(data.loadedAt))+' · '+E(A().school?.name||profile()?.school_id||'Active school')+'</p></div><div class="cc-row"><label class="cc-muted" for="cc-date-range">Reporting range</label><select id="cc-date-range" class="cc-filter"><option value="today">Today</option><option value="7d">Next 7 days</option><option value="30d">Next 30 days</option></select></div></div><div id="cc-widget-grid" class="cc-grid" style="margin-top:13px">'+S.prefs.widgets.map(id=>widgetMarkup(id,data)).join('')+'</div><p class="cc-drag-hint">Tip: drag widgets to rearrange, use ↗ to resize, ◌ to hide and × to remove them from this layout. Hidden widgets never delete their data.</p>';
+  $('cc-date-range').value=S.prefs.dateRange||'7d';
+  $('cc-date-range').onchange=async()=>{S.prefs.dateRange=v('cc-date-range');try{await savePref();}catch(e){msg(e.message,'error');}};
+  $('cc-refresh').onclick=renderDashboard;$('cc-manage-widgets').onclick=openWidgetManager;$('cc-reset').onclick=async()=>{S.prefs=structuredClone(DEFAULT);try{await savePref();await renderDashboard();}catch(e){msg(e.message,'error');}};
+  $('cc-save-school-default')?.addEventListener('click',async()=>{try{await savePref('school');}catch(e){msg(e.message,'error');}});
+  target.querySelectorAll('[data-cc-hide]').forEach(b=>b.onclick=async()=>{const id=b.dataset.ccHide;S.prefs.hidden=S.prefs.hidden||[];S.prefs.hidden=S.prefs.hidden.includes(id)?S.prefs.hidden.filter(x=>x!==id):[...S.prefs.hidden,id];try{await savePref();await renderDashboard();}catch(e){msg(e.message,'error');}});
+  target.querySelectorAll('[data-cc-size]').forEach(b=>b.onclick=async()=>{const id=b.dataset.ccSize;S.prefs.sizes=S.prefs.sizes||{};S.prefs.sizes[id]=S.prefs.sizes[id]==='wide'?'normal':'wide';try{await savePref();await renderDashboard();}catch(e){msg(e.message,'error');}});
+  target.querySelectorAll('[data-cc-remove]').forEach(b=>b.onclick=async()=>{const id=b.dataset.ccRemove;S.prefs.widgets=S.prefs.widgets.filter(x=>x!==id);S.prefs.hidden=S.prefs.hidden.filter(x=>x!==id);try{await savePref();await renderDashboard();}catch(e){msg(e.message,'error');}});
+  $('cc-open-tasks')?.addEventListener('click',()=>A().openView('school-tasks'));$('cc-open-email')?.addEventListener('click',()=>A().openView('email-automation'));$('cc-generate-insights')?.addEventListener('click',generateInsights);$('cc-open-intelligence')?.addEventListener('click',()=>A().openView('command-centre'));
+  bindDragDrop();
+ }catch(e){target.innerHTML='<div class="cc-note error">Could not load the Command Centre: '+E(e.message||e)+'. Your existing dashboard is unchanged.</div>';}
+}
+function bindDragDrop(){
+ const grid=$('cc-widget-grid');if(!grid)return;let from=null;
+ grid.querySelectorAll('[data-widget]').forEach(card=>{
+  card.addEventListener('dragstart',e=>{from=card.dataset.widget;card.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',from);});
+  card.addEventListener('dragend',()=>{from=null;card.classList.remove('dragging');grid.querySelectorAll('.dragging').forEach(x=>x.classList.remove('dragging'));});
+  card.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';});
+  card.addEventListener('drop',async e=>{e.preventDefault();const to=card.dataset.widget,source=from||e.dataTransfer.getData('text/plain');if(!source||source===to)return;const a=S.prefs.widgets.indexOf(source),b=S.prefs.widgets.indexOf(to);if(a<0||b<0)return;S.prefs.widgets.splice(a,1);S.prefs.widgets.splice(S.prefs.widgets.indexOf(to),0,source);try{await savePref();await renderDashboard();}catch(err){msg(err.message,'error');}});
+ });
+}
+function openWidgetManager(){
+ const inSet=new Set(S.prefs.widgets);
+ const backdrop=document.createElement('div');backdrop.className='cc-modal-backdrop';backdrop.innerHTML='<section class="cc-modal" role="dialog" aria-modal="true" aria-labelledby="cc-widgets-title"><div class="cc-toolbar"><div><h2 id="cc-widgets-title">Customise dashboard widgets</h2><p class="cc-muted">Add or remove widgets from your layout. Hidden widgets stay in the catalogue. Fee Management remains planned until its module is implemented.</p></div><button class="cc-btn" id="cc-widgets-close">Close</button></div><div class="cc-widget-catalog" style="margin:15px 0">'+WIDGETS.map(w=>'<label class="cc-catalog-item"><input type="checkbox" data-cc-pick="'+w[0]+'" '+(inSet.has(w[0])?'checked':'')+'><span><b>'+E(w[1])+'</b><small class="cc-muted">'+E(w[2])+'</small></span></label>').join('')+'</div><div class="cc-row">'+btn('cc-widgets-apply','Save widget selection','primary')+btn('cc-widgets-default','Reset selection')+'</div></section>';
+ document.body.appendChild(backdrop);const close=()=>backdrop.remove();$('cc-widgets-close').onclick=close;backdrop.addEventListener('click',e=>{if(e.target===backdrop)close();});
+ $('cc-widgets-default').onclick=()=>{backdrop.querySelectorAll('[data-cc-pick]').forEach(c=>c.checked=DEFAULT.widgets.includes(c.dataset.ccPick));};
+ $('cc-widgets-apply').onclick=async()=>{S.prefs.widgets=Array.from(backdrop.querySelectorAll('[data-cc-pick]:checked')).map(c=>c.dataset.ccPick);S.prefs.hidden=(S.prefs.hidden||[]).filter(x=>S.prefs.widgets.includes(x));try{await savePref();close();await renderDashboard();}catch(e){msg(e.message,'error');}};
+}
+async function renderTasks(){
+ $('view-school-tasks').innerHTML=shell('school-tasks','Tasks & deadlines','Create, assign, track, comment on, and complete school tasks. Changes are saved to the existing school_tasks and task_assignees tables.',btn('cc-task-refresh','Refresh tasks')+btn('cc-task-new','Create task','primary'));
+ const body=$('school-tasks-body');body.innerHTML='<div class="cc-empty">Loading tasks…</div>';
+ try{await loadData();body.innerHTML='<div class="cc-grid"><section class="cc-widget"><div class="cc-widget-head"><div><h3 id="cc-task-form-title">Create school task</h3><p>Deadlines and assignment status are persisted in Supabase.</p></div></div><form class="cc-form" id="cc-task-form"><div class="cc-form-grid">'+field('cc-task-title','Task title','text',true,'maxlength="180"')+sel('cc-task-priority','Priority',[['low','Low'],['normal','Normal'],['high','High'],['urgent','Urgent']],true)+field('cc-task-start','Start date and time','datetime-local')+field('cc-task-due','Deadline','datetime-local')+field('cc-task-reminder','Reminder time','datetime-local')+sel('cc-task-assignee','Assign to (teacher/staff)',[['','Unassigned'],...S.staff.map(x=>[x.id,(x.full_name||x.email)+' · '+x.role]])])+sel('cc-task-status','Status',[['open','Not started'],['in_progress','In progress'],['blocked','Blocked'],['completed','Completed'],['cancelled','Cancelled']],true)+'</div>'+ta('cc-task-description','Description / instructions')+ta('cc-task-checklist','Checklist (one item per line)')+sel('cc-task-repeat','Recurrence',[['','No recurrence'],['daily','Daily'],['weekly','Weekly'],['monthly','Monthly']])+ '<div class="cc-row">'+btn('cc-task-save','Save task','primary')+btn('cc-task-cancel-edit','Cancel edit')+'</div><div id="cc-task-form-status"></div></form></section><section class="cc-widget"><div class="cc-widget-head"><div><h3>Task filters</h3><p>Filter saved task records by deadline and status.</p></div></div><div class="cc-form">'+sel('cc-task-filter','Status',[['all','All status'],['open','Not started'],['in_progress','In progress'],['blocked','Blocked'],['completed','Completed'],['cancelled','Cancelled']])+sel('cc-task-time-filter','Due date',[['all','All dates'],['overdue','Overdue'],['7d','Next 7 days'],['none','No deadline']])+'<div class="cc-note">Permission checks and task visibility are enforced by Supabase Row Level Security as well as this interface.</div></div></section></div><section class="cc-widget"><div class="cc-toolbar"><div><h3 style="font:800 15px Manrope;margin:0">School task list</h3><p class="cc-muted">Completed and cancelled tasks remain in history; they are not deleted.</p></div>'+btn('cc-task-refresh-2','Refresh list')+'</div><div id="cc-task-list" style="margin-top:12px"></div></section>';
+  const reset=()=>{$('cc-task-form').reset();S.editTask=null;$('cc-task-form-title').textContent='Create school task';$('cc-task-save').textContent='Save task';$('cc-task-form-status').innerHTML='';};
+  $('cc-task-form').onsubmit=saveTask; $('cc-task-cancel-edit').onclick=reset; $('cc-task-new').onclick=()=>{reset();$('cc-task-title').focus();}; $('cc-task-refresh').onclick=renderTasks;$('cc-task-refresh-2').onclick=()=>{loadData().then(renderTaskRows).catch(e=>msg(e.message,'error'));};
+  $('cc-task-filter').onchange=renderTaskRows;$('cc-task-time-filter').onchange=renderTaskRows;await renderTaskRows();
+ }catch(e){body.innerHTML='<div class="cc-note error">Task records could not be loaded: '+E(e.message||e)+'</div>';}
+}
+async function canManageTasks(){if(ROLE_ALLOWED.includes(profile()?.role)||profile()?.role==='creator')return true;if(profile()?.role!=='manager')return false;const r=await db().from('role_permissions').select('is_allowed').eq('school_id',schoolId()).eq('role','manager').eq('permission_key','manage_tasks').maybeSingle();return !r.error&&r.data?.is_allowed===true;}
+function setTaskStatus(id,text,kind=''){const n=$('cc-task-form-status');if(n)n.innerHTML='<div class="cc-note '+kind+'">'+E(text)+'</div>';}
+async function saveTask(e){
+ e.preventDefault();const can=await canManageTasks();if(!can)return setTaskStatus('','Your role does not have task-management permission.','error');
+ const title=v('cc-task-title'),assignee=v('cc-task-assignee'),checklist=v('cc-task-checklist').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>({text:x,done:false})),repeat=v('cc-task-repeat');
+ if(!title)return setTaskStatus('','Task title is required.','error');
+ const payload={school_id:schoolId(),created_by:user().id,title,description:v('cc-task-description')||null,task_type:'school',priority:v('cc-task-priority')||'normal',status:v('cc-task-status')||'open',starts_at:v('cc-task-start')?new Date(v('cc-task-start')).toISOString():null,due_at:v('cc-task-due')?new Date(v('cc-task-due')).toISOString():null,reminder_at:v('cc-task-reminder')?new Date(v('cc-task-reminder')).toISOString():null,checklist,recurrence:repeat?{frequency:repeat,timezone:'Asia/Kolkata'}:null};
+ try{
+  let result;
+  if(S.editTask){result=await db().from('school_tasks').update({...payload,created_by:S.editTask.created_by,school_id:schoolId()}).eq('id',S.editTask.id).select('id').single();}
+  else result=await db().from('school_tasks').insert(payload).select('id').single();
+  if(result.error)throw result.error;const id=result.data.id;
+  if(assignee){
+   if(S.editTask){const del=await db().from('task_assignees').delete().eq('school_id',schoolId()).eq('task_id',id);if(del.error)throw del.error;}
+   const assigned=await db().from('task_assignees').insert({school_id:schoolId(),task_id:id,assignee_id:assignee,assigned_by:user().id,status:payload.status==='completed'?'completed':payload.status==='in_progress'?'in_progress':'assigned'});
+   if(assigned.error)throw new Error('Task saved, but assignment failed: '+assigned.error.message);
+  }
+  msg(S.editTask?'Task updated.':'Task saved in the existing school task system.','success');S.editTask=null;await renderTasks();
+ }catch(err){setTaskStatus('',err.message||'Task save failed.','error');}
+}
+async function renderTaskRows(){
+ const box=$('cc-task-list');if(!box)return;const status=v('cc-task-filter')||'all',time=v('cc-task-time-filter')||'all',now=Date.now(),week=now+7*86400000;
+ let rows=S.tasks.filter(t=>(status==='all'||t.status===status)&&(time==='all'||(time==='overdue'&&t.due_at&&new Date(t.due_at).getTime()<now&&!['completed','cancelled','archived'].includes(t.status))||(time==='7d'&&t.due_at&&new Date(t.due_at).getTime()>=now&&new Date(t.due_at).getTime()<=week&&!['completed','cancelled','archived'].includes(t.status))||(time==='none'&&!t.due_at)));
+ const assigns=S.assignees;
+ box.innerHTML=rows.length?'<div class="cc-line-list">'+rows.map(t=>{const assigned=assigns.filter(a=>a.task_id===t.id).map(a=>{const p=S.staff.find(s=>s.id===a.assignee_id);return p?.full_name||p?.email||'Assigned staff';});const overdue=t.due_at&&new Date(t.due_at).getTime()<now&&!['completed','cancelled','archived'].includes(t.status);return '<div class="cc-list-item"><div style="min-width:0;flex:1"><b>'+E(t.title)+'</b><small>'+E(t.description||'')+'</small><small>Assigned: '+E(assigned.join(', ')||'Unassigned')+' · Due: '+E(fmt(t.due_at))+'</small><div class="cc-row" style="margin-top:6px">'+chip(t.status,overdue?'bad':t.status==='completed'?'good':'')+chip(t.priority,t.priority==='urgent'||t.priority==='high'?'warn':'')+'</div></div><div class="cc-row">'+(awaitCanTaskEdit()?'<button class="cc-btn" data-cc-edit-task="'+t.id+'">Edit</button>':'')+'<button class="cc-btn" data-cc-task-comment="'+t.id+'">Comment / history</button>'+(awaitCanTaskEdit()?'<select class="cc-filter" data-cc-task-status="'+t.id+'" aria-label="Change task status"><option value="">Change status</option><option value="open">Not started</option><option value="in_progress">In progress</option><option value="blocked">Blocked</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select>':'')+'</div></div>';}).join('')+'</div>':listEmpty('No tasks match the selected filters.');
+ box.querySelectorAll('[data-cc-edit-task]').forEach(b=>b.onclick=()=>editTask(b.dataset.ccEditTask));
+ box.querySelectorAll('[data-cc-task-status]').forEach(s=>s.onchange=async()=>{if(!s.value)return;try{const next=s.value;const u=await db().from('school_tasks').update({status:next}).eq('school_id',schoolId()).eq('id',s.dataset.ccTaskStatus);if(u.error)throw u.error;await db().from('task_assignees').update({status:next==='completed'?'completed':next==='in_progress'?'in_progress':'assigned',status_updated_at:new Date().toISOString()}).eq('school_id',schoolId()).eq('task_id',s.dataset.ccTaskStatus);msg('Task status updated.','success');await loadData();await renderTaskRows();}catch(e){msg(e.message,'error');}});
+ box.querySelectorAll('[data-cc-task-comment]').forEach(b=>b.onclick=()=>openTaskComments(b.dataset.ccTaskComment));
+}
+function awaitCanTaskEdit(){return ROLE_ALLOWED.includes(profile()?.role)||profile()?.role==='creator'||(profile()?.role==='manager'&&S.managerAllowed);}
+function editTask(id){const t=S.tasks.find(x=>x.id===id);if(!t)return;S.editTask=t;$('cc-task-form-title').textContent='Edit task';$('cc-task-save').textContent='Save changes';$('cc-task-title').value=t.title||'';$('cc-task-description').value=t.description||'';$('cc-task-priority').value=t.priority||'normal';$('cc-task-status').value=t.status||'open';$('cc-task-start').value=localInput(t.starts_at);$('cc-task-due').value=localInput(t.due_at);$('cc-task-reminder').value=localInput(t.reminder_at);$('cc-task-checklist').value=(Array.isArray(t.checklist)?t.checklist.map(x=>typeof x==='string'?x:x.text||''):[]).join('\n');$('cc-task-repeat').value=t.recurrence?.frequency||'';const a=S.assignees.find(x=>x.task_id===id);$('cc-task-assignee').value=a?.assignee_id||'';$('cc-task-title').focus();}
+async function openTaskComments(id){
+ const task=S.tasks.find(t=>t.id===id);if(!task)return;
+ const [comments,history]=await Promise.all([
+  db().from('school_task_comments').select('id,author_id,comment,created_at').eq('school_id',schoolId()).eq('task_id',id).order('created_at'),
+  db().from('school_task_status_history').select('old_status,new_status,note,created_at,actor_id').eq('school_id',schoolId()).eq('task_id',id).order('created_at',{ascending:false}).limit(30)
+ ]);
+ const modal=document.createElement('div');modal.className='cc-modal-backdrop';modal.innerHTML='<section class="cc-modal" role="dialog" aria-modal="true"><div class="cc-toolbar"><div><h2>'+E(task.title)+'</h2><p class="cc-muted">Comments and server-recorded status history.</p></div><button class="cc-btn" id="cc-comment-close">Close</button></div><div class="cc-grid" style="margin-top:14px"><section><h3 style="font:800 14px Manrope">Comments</h3>'+(comments.error?'<div class="cc-note error">'+E(comments.error.message)+'</div>':(comments.data||[]).map(c=>'<div class="cc-note" style="margin:7px 0">'+E(c.comment)+'<small class="cc-muted" style="display:block;margin-top:5px">'+E(fmt(c.created_at))+'</small></div>').join('')||listEmpty('No comments yet.'))+'</section><section><h3 style="font:800 14px Manrope">Status history</h3>'+(history.error?'<div class="cc-note error">'+E(history.error.message)+'</div>':(history.data||[]).map(h=>'<div class="cc-note" style="margin:7px 0">'+E(h.old_status||'Created')+' → <b>'+E(h.new_status)+'</b><small class="cc-muted" style="display:block">'+E(fmt(h.created_at))+'</small></div>').join('')||listEmpty('No status changes recorded yet.'))+'</section></div><form id="cc-add-comment" class="cc-form" style="margin-top:16px">'+ta('cc-comment-text','Add a comment',true)+'<div class="cc-row"><button class="cc-btn primary" type="submit">Save comment</button><span id="cc-comment-result" class="cc-muted"></span></div></form></section>';document.body.appendChild(modal);
+ $('cc-comment-close').onclick=()=>modal.remove();modal.onclick=e=>{if(e.target===modal)modal.remove();};
+ $('cc-add-comment').onsubmit=async e=>{e.preventDefault();try{const text=v('cc-comment-text');const r=await db().from('school_task_comments').insert({school_id:schoolId(),task_id:id,author_id:user().id,comment:text});if(r.error)throw r.error;msg('Comment saved.','success');modal.remove();await openTaskComments(id);}catch(err){$('cc-comment-result').textContent=err.message||'Could not save comment.';}};
+}
+function calendarRange(){
+ const d=new Date(S.calendarDate),start=new Date(d),end=new Date(d);
+ if(S.calendarMode==='day'){start.setHours(0,0,0,0);end.setHours(23,59,59,999);}
+ else if(S.calendarMode==='week'){const day=(d.getDay()+6)%7;start.setDate(d.getDate()-day);start.setHours(0,0,0,0);end.setTime(start.getTime()+7*86400000-1);}
+ else{start.setDate(1);start.setHours(0,0,0,0);end.setMonth(start.getMonth()+1,0);end.setHours(23,59,59,999);}
+ return {start,end};
+}
+async function renderCalendar(){
+ $('view-school-calendar').innerHTML=shell('school-calendar','School calendar','Daily, weekly and monthly views of real school events, examinations and task deadlines.',btn('cc-calendar-prev','← Previous')+btn('cc-calendar-today','Today')+btn('cc-calendar-next','Next →')+btn('cc-calendar-new','Add event','primary')+btn('cc-calendar-refresh','Refresh'));
+ const body=$('school-calendar-body');body.innerHTML='<div class="cc-empty">Loading school calendar…</div>';
+ try{await loadData();body.innerHTML='<section class="cc-widget"><div class="cc-toolbar"><div><h3 style="font:800 15px Manrope;margin:0">Calendar view</h3><p id="cc-calendar-caption" class="cc-muted"></p></div><div class="cc-row"><label for="cc-cal-mode" class="cc-muted">View</label><select id="cc-cal-mode" class="cc-filter"><option value="day">Daily</option><option value="week">Weekly</option><option value="month">Monthly</option></select><select id="cc-cal-type" class="cc-filter"><option value="all">All events</option><option value="exam">Examinations</option><option value="meeting">Meetings</option><option value="holiday">Holidays</option><option value="school">School events</option><option value="task">Task deadlines</option></select></div></div><div id="cc-calendar-list" style="margin-top:14px"></div></section><section class="cc-widget"><div class="cc-widget-head"><div><h3 id="cc-event-form-title">Add a school event</h3><p>Events are saved to the existing calendar_events table.</p></div></div><form class="cc-form" id="cc-event-form"><div class="cc-form-grid">'+field('cc-event-title','Event title','text',true)+sel('cc-event-type','Category',[['school','School event'],['meeting','Meeting'],['exam','Examination'],['holiday','Holiday'],['reminder','Reminder']])+field('cc-event-start','Starts at','datetime-local',true)+field('cc-event-end','Ends at','datetime-local')+sel('cc-event-class','Class (optional)',[['','All classes'],...S.classes.map(x=>[x.id,x.name])])+sel('cc-event-section','Section (optional)',[['','All sections'],...S.sections.map(x=>[x.id,x.name])])+field('cc-event-location','Location','text')+'</div>'+ta('cc-event-description','Details / agenda')+sel('cc-event-status','Event status',[['scheduled','Scheduled'],['completed','Completed'],['cancelled','Cancelled']])+ '<div class="cc-row">'+btn('cc-event-save','Save event','primary')+btn('cc-event-cancel-edit','Cancel edit')+'</div><div id="cc-event-message"></div></form></section>';
+ $('cc-calendar-prev').onclick=()=>{if(S.calendarMode==='day')S.calendarDate.setDate(S.calendarDate.getDate()-1);else if(S.calendarMode==='week')S.calendarDate.setDate(S.calendarDate.getDate()-7);else S.calendarDate.setMonth(S.calendarDate.getMonth()-1);renderCalendarBody();};
+ $('cc-calendar-next').onclick=()=>{if(S.calendarMode==='day')S.calendarDate.setDate(S.calendarDate.getDate()+1);else if(S.calendarMode==='week')S.calendarDate.setDate(S.calendarDate.getDate()+7);else S.calendarDate.setMonth(S.calendarDate.getMonth()+1);renderCalendarBody();};
+ $('cc-calendar-today').onclick=()=>{S.calendarDate=new Date();renderCalendarBody();};$('cc-calendar-refresh').onclick=renderCalendar; $('cc-calendar-new').onclick=()=>{$('cc-event-form').reset();S.editEvent=null;$('cc-event-form-title').textContent='Add a school event';};
+ $('cc-cal-mode').value=S.calendarMode;$('cc-cal-mode').onchange=()=>{S.calendarMode=v('cc-cal-mode');renderCalendarBody();};$('cc-cal-type').onchange=renderCalendarBody;
+ $('cc-event-form').onsubmit=saveEvent;$('cc-event-cancel-edit').onclick=()=>{S.editEvent=null;$('cc-event-form').reset();$('cc-event-form-title').textContent='Add a school event';};
+ await renderCalendarBody();
+ }catch(e){body.innerHTML='<div class="cc-note error">Calendar could not load: '+E(e.message||e)+'</div>';}
+}
+async function canManageEvents(){if(ROLE_ALLOWED.includes(profile()?.role)||profile()?.role==='creator')return true;if(profile()?.role!=='manager')return false;const r=await db().from('role_permissions').select('is_allowed').eq('school_id',schoolId()).eq('role','manager').eq('permission_key','manage_meetings').maybeSingle();return !r.error&&r.data?.is_allowed===true;}
+async function saveEvent(e){
+ e.preventDefault();if(!(await canManageEvents())){$('cc-event-message').innerHTML='<div class="cc-note error">Your role cannot manage school calendar events.</div>';return;}
+ try{const payload={school_id:schoolId(),created_by:user().id,title:v('cc-event-title'),description:v('cc-event-description')||null,event_type:v('cc-event-type')||'school',starts_at:new Date(v('cc-event-start')).toISOString(),ends_at:v('cc-event-end')?new Date(v('cc-event-end')).toISOString():null,location:v('cc-event-location')||null,class_id:v('cc-event-class')||null,section_id:v('cc-event-section')||null,status:v('cc-event-status')||'scheduled',target_roles:['principal','manager','teacher','student']};
+  const r=S.editEvent?await db().from('calendar_events').update({...payload,created_by:S.editEvent.created_by}).eq('school_id',schoolId()).eq('id',S.editEvent.id):await db().from('calendar_events').insert(payload);
+  if(r.error)throw r.error;msg(S.editEvent?'Calendar event updated.':'Calendar event saved. No email delivery is claimed.','success');S.editEvent=null;await renderCalendar();
+ }catch(err){$('cc-event-message').innerHTML='<div class="cc-note error">'+E(err.message||err)+'</div>';}
+}
+async function renderCalendarBody(){
+ const box=$('cc-calendar-list');if(!box)return;const {start,end}=calendarRange();$('cc-calendar-caption').textContent=start.toLocaleDateString(undefined,{dateStyle:'medium'})+' – '+end.toLocaleDateString(undefined,{dateStyle:'medium'});
+ const filter=v('cc-cal-type')||'all',min=start.toISOString(),max=end.toISOString();
+ let items=[...S.events.filter(e=>e.starts_at>=min&&e.starts_at<=max&&e.status!=='cancelled').map(e=>({...e,itemType:e.event_type||'school',itemKind:'event'})),...S.assessments.filter(e=>e.assessment_date>=min.slice(0,10)&&e.assessment_date<=max.slice(0,10)).map(e=>({...e,starts_at:e.assessment_date+'T09:00:00',itemType:e.assessment_type||'exam',itemKind:'assessment'})),...S.tasks.filter(t=>t.due_at&&t.due_at>=min&&t.due_at<=max&&!['cancelled','archived'].includes(t.status)).map(t=>({...t,starts_at:t.due_at,itemType:'task',itemKind:'task'}))];
+ if(filter!=='all')items=items.filter(e=>filter==='task'?e.itemKind==='task':filter==='exam'?e.itemType==='exam'||e.itemType==='test':e.itemType===filter);
+ items.sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at));
+ box.innerHTML=items.length?items.map(e=>{const d=new Date(e.starts_at);return '<div class="cc-event-row"><div class="cc-date-pill">'+E(d.toLocaleDateString(undefined,{month:'short'}))+'<b>'+E(String(d.getDate()))+'</b>'+E(d.toLocaleDateString(undefined,{weekday:'short'}))+'</div><div><b>'+E(e.title)+'</b><small class="cc-muted" style="display:block">'+E(fmt(e.starts_at))+' · '+E(e.itemType)+' · '+E(e.itemKind==='task'?e.status||'task':e.status||'scheduled')+'</small><small class="cc-muted">'+E(e.location||e.description||'')+'</small></div><div class="cc-event-actions">'+(e.itemKind==='event'&&awaitCanTaskEdit()?'<button class="cc-btn" data-cc-edit-event="'+e.id+'">Edit</button>':'')+'</div></div>';}).join(''):listEmpty('No calendar events, assessments or task deadlines fall in this period.');
+ box.querySelectorAll('[data-cc-edit-event]').forEach(b=>b.onclick=()=>editEvent(b.dataset.ccEditEvent));
+}
+function editEvent(id){const e=S.events.find(x=>x.id===id);if(!e)return;S.editEvent=e;$('cc-event-form-title').textContent='Edit calendar event';$('cc-event-title').value=e.title||'';$('cc-event-type').value=e.event_type||'school';$('cc-event-start').value=localInput(e.starts_at);$('cc-event-end').value=localInput(e.ends_at);$('cc-event-location').value=e.location||'';$('cc-event-description').value=e.description||'';$('cc-event-class').value=e.class_id||'';$('cc-event-section').value=e.section_id||'';$('cc-event-status').value=e.status||'scheduled';$('cc-event-form-title').scrollIntoView({behavior:'smooth',block:'center'});}
+async function renderEmail(){
+ $('view-email-automation').innerHTML=shell('email-automation','Email automation','Manage school-branded templates, explicit trigger rules, test email attempts, and status logs. The browser never contains provider credentials.',btn('cc-email-refresh','Refresh')+btn('cc-email-test','Send test email to my signed-in address','primary'));
+ const body=$('email-automation-body');body.innerHTML='<div class="cc-empty">Loading saved email templates and logs…</div>';
+ try{await loadData();body.innerHTML='<div class="cc-grid"><section class="cc-widget"><div class="cc-widget-head"><div><h3>Create email template</h3><p>Templates are stored but never mass-sent just by saving them.</p></div></div><form id="cc-template-form" class="cc-form">'+field('cc-template-name','Template name','text',true)+sel('cc-template-category','Category',[['school_notice','School notice'],['task_reminder','Task reminder'],['exam_notice','Exam notice'],['daily_report_due','Daily report reminder'],['parent_message','Parent communication']])+field('cc-template-subject','Email subject','text',true)+ta('cc-template-body','Plain-text message body',true)+'<div class="cc-row">'+btn('cc-template-preview','Preview')+btn('cc-template-save','Save template','primary')+'</div><div id="cc-template-result"></div><div id="cc-template-preview-box"></div></form></section><section class="cc-widget"><div class="cc-widget-head"><div><h3>Create automation rule</h3><p>Saving a rule creates a disabled rule first. Enable it only after provider and policy checks.</p></div></div><form id="cc-rule-form" class="cc-form">'+field('cc-rule-name','Rule name','text',true)+sel('cc-rule-trigger','Trigger',[['task_deadline_approaching','Task deadline approaching'],['task_overdue','Task overdue'],['daily_report_due','Daily report deadline'],['exam_approaching','Exam approaching'],['syllabus_milestone_missed','Syllabus milestone missed']])+sel('cc-rule-action','Action',[['email','Send email'],['notification','In-app notification'],['create_review_task','Create review task']])+sel('cc-rule-template','Email template',[['','Select a saved template'],...S.templates.map(t=>[t.id,t.name])])+ '<div class="cc-note warn">Rule enablement only stores the authorized trigger configuration. Actual outbound delivery requires provider secrets and the scheduled worker to be configured.</div>'+btn('cc-rule-save','Save disabled rule','primary')+'<div id="cc-rule-result"></div></form></section></div><section class="cc-widget"><div class="cc-toolbar"><div><h3 style="font:800 15px Manrope;margin:0">Automation rules</h3><p class="cc-muted">School-scoped and auditable.</p></div></div><div id="cc-rule-list" style="margin-top:12px"></div></section><section class="cc-widget"><div class="cc-toolbar"><div><h3 style="font:800 15px Manrope;margin:0">Email attempt log</h3><p class="cc-muted">“Sent” means accepted by provider; it does not guarantee inbox delivery.</p></div></div><div id="cc-email-log-list" style="margin-top:12px"></div></section>';
+ $('cc-email-refresh').onclick=renderEmail;$('cc-email-test').onclick=sendTestEmail;$('cc-template-form').onsubmit=saveTemplate;$('cc-rule-form').onsubmit=saveRule;
+ $('cc-template-preview').onclick=()=>{const box=$('cc-template-preview-box');box.innerHTML='<div class="cc-template-preview"><b>'+E(v('cc-template-subject')||'(Subject not entered)')+'</b><hr>'+E(v('cc-template-body'))+'</div>';};
+ await renderRuleRows();await renderEmailRows();
+ }catch(e){body.innerHTML='<div class="cc-note error">Email automation data could not be loaded: '+E(e.message||e)+'</div>';}
+}
+async function canManageEmail(){if(ROLE_ALLOWED.includes(profile()?.role)||profile()?.role==='creator')return true;if(profile()?.role!=='manager')return false;const r=await db().from('role_permissions').select('is_allowed').eq('school_id',schoolId()).eq('role','manager').eq('permission_key','manage_email_automation').maybeSingle();return !r.error&&r.data?.is_allowed===true;}
+async function saveTemplate(e){e.preventDefault();if(!(await canManageEmail()))return $('cc-template-result').innerHTML='<div class="cc-note error">Your role cannot manage email templates.</div>';try{const r=await db().from('school_email_templates').insert({school_id:schoolId(),created_by:user().id,name:v('cc-template-name'),category:v('cc-template-category')||'school_notice',subject:v('cc-template-subject'),body_html:v('cc-template-body'),is_enabled:false});if(r.error)throw r.error;msg('Template saved disabled. Preview it and configure provider before use.','success');await renderEmail();}catch(err){$('cc-template-result').innerHTML='<div class="cc-note error">'+E(err.message||err)+'</div>';}}
+async function saveRule(e){e.preventDefault();if(!(await canManageEmail()))return $('cc-rule-result').innerHTML='<div class="cc-note error">Your role cannot manage automation rules.</div>';try{const template=v('cc-rule-template')||null,action=v('cc-rule-action');const r=await db().from('school_automation_rules').insert({school_id:schoolId(),created_by:user().id,name:v('cc-rule-name'),trigger_type:v('cc-rule-trigger'),conditions:{needs_active_recipient:true,not_already_processed:true},action_type:action,action_config:template?{template_id:template}: {},is_enabled:false,timezone:'Asia/Kolkata'});if(r.error)throw r.error;msg('Rule saved disabled; enable only after scheduled-worker/provider setup.','success');await renderEmail();}catch(err){$('cc-rule-result').innerHTML='<div class="cc-note error">'+E(err.message||err)+'</div>';}}
+async function renderRuleRows(){const box=$('cc-rule-list');if(!box)return;box.innerHTML=S.rules.length?table(['Rule','Trigger','Action','Enabled','Controls'],S.rules.map(r=>'<tr><td><b>'+E(r.name)+'</b></td><td>'+E(r.trigger_type)+'</td><td>'+E(r.action_type)+'</td><td>'+chip(r.is_enabled?'Enabled':'Disabled',r.is_enabled?'good':'warn')+'</td><td><button type="button" class="cc-btn" data-cc-rule-toggle="'+r.id+'">'+(r.is_enabled?'Disable':'Enable')+'</button></td></tr>')):listEmpty('No automation rules have been configured.');
+ box.querySelectorAll('[data-cc-rule-toggle]').forEach(b=>b.onclick=async()=>{if(!(await canManageEmail()))return msg('Permission denied.','error');const rule=S.rules.find(x=>x.id===b.dataset.ccRuleToggle);const next=!rule.is_enabled;if(next&&!confirm('Enable this automation rule? Scheduled worker and provider configuration must already be complete.'))return;try{const r=await db().from('school_automation_rules').update({is_enabled:next}).eq('school_id',schoolId()).eq('id',rule.id);if(r.error)throw r.error;msg(next?'Rule enabled.':'Rule disabled.','success');await renderEmail();}catch(e){msg(e.message,'error');}});
+}
+async function renderEmailRows(){const box=$('cc-email-log-list');if(!box)return;box.innerHTML=S.logs.length?table(['Time','Recipient','Subject','Status','Attempts / failure'],S.logs.map(l=>'<tr><td>'+E(fmt(l.created_at))+'</td><td>'+E(l.recipient_email)+'</td><td>'+E(l.subject)+'</td><td>'+chip(l.status,l.status==='sent'?'good':l.status==='failed'?'bad':'warn')+'</td><td>'+E(l.attempt_count||0)+(l.error_summary?'<br><small class="cc-muted">'+E(l.error_summary)+'</small>':'')+'</td></tr>')):listEmpty('No email attempts have been logged for this school.')+'<div class="cc-muted" style="margin-top:8px">Saved notification events: '+S.logs.length+' email log row(s) currently available in your permitted scope.</div>';}
+async function sendTestEmail(){if(!(await canManageEmail()))return msg('Your role cannot send email tests.','error');if(!user()?.email)return msg('The signed-in account has no verified email address to test.','error');const b=$('cc-email-test');if(b)b.disabled=true;try{const r=await db().functions.invoke('noor-school-automation',{body:{action:'send_test',school_id:schoolId()}});if(r.error)throw new Error(r.data?.error||r.error.message||'Email test failed');const status=r.data?.status||'unknown';msg(status==='sent'?'Test email accepted by the configured provider. This does not confirm inbox delivery.':(r.data?.message||'Email test result recorded: '+status),status==='sent'?'success':'error');await loadData();await renderEmailRows();}catch(e){msg(e.message||'Could not run email test. Check Edge Function and provider secrets.','error');try{await loadData();await renderEmailRows();}catch{}}finally{if(b)b.disabled=false;}}
+async function generateInsights(){
+ const box=$('cc-insight-preview');if(!box)return;box.innerHTML='<div class="cc-note">Reviewing authorised records…</div>';const b=$('cc-generate-insights');if(b)b.disabled=true;
+ try{const r=await db().functions.invoke('noor-school-automation',{body:{action:'school_insights',school_id:schoolId()}});if(r.error)throw new Error(r.data?.error||r.error.message||'Could not generate insights');const x=r.data||{};box.innerHTML='<div class="cc-note '+(x.ai_used?'good':'warn')+'">'+E(x.ai_used?'AI summary generated from the selected school records.':'AI provider is not configured; showing database-derived operational signals only.')+'</div>'+(x.summary?'<section class="cc-widget" style="margin-top:8px"><h3 style="font:800 13px Manrope">Summary</h3><p>'+E(x.summary)+'</p></section>':'')+(x.facts||[]).map(f=>'<section class="cc-widget" style="margin-top:8px"><div class="cc-toolbar"><b>'+E(f.title||'Operational signal')+'</b>'+chip(f.type||'fact',f.type==='recommendation'?'warn':'good')+'</div><p class="cc-muted">'+E(f.detail||'')+'</p>'+(f.sources?.length?'<small class="cc-muted">Supporting records: '+E(f.sources.join(', '))+'</small>':'')+'</section>').join('')+(x.recommendations?.length?'<section class="cc-widget" style="margin-top:8px"><h3 style="font:800 13px Manrope">Recommended next actions</h3><ol>'+x.recommendations.map(a=>'<li>'+E(a)+'</li>').join('')+'</ol></section>':'')+'<small class="cc-muted">Period: '+E(x.period||'Not returned')+'. Recommendations require human review and do not change official student or staff records.</small>';}
+ catch(e){box.innerHTML='<div class="cc-note error">Insights unavailable: '+E(e.message||e)+'. Check the secure Edge Function deployment.</div>';}
+ finally{if(b)b.disabled=false;}
+}
+async function route(id){
+ if(!ROUTES.includes(id))return false;
+ if(!(await permitted())){msg('This section is only available to authenticated, authorised school leadership.','error');return true;}
+ if(!hasSchool()){msg('Choose the active school workspace first.','error');return true;}
+ try{
+  if(id==='command-centre')await renderDashboard();
+  if(id==='school-tasks')await renderTasks();
+  if(id==='school-calendar')await renderCalendar();
+  if(id==='email-automation')await renderEmail();
+ }catch(e){console.error('Command Centre route failed',e);msg(e.message||'Section could not load.','error');}
+ return true;
+}
+function installRouter(){
+ if(!window.NOOR_ACADEMIC||window.NOOR_ACADEMIC.__ccWrapped)return;
+ const previous=window.NOOR_ACADEMIC.open;
+ window.NOOR_ACADEMIC.open=async id=>ROUTES.includes(id)?route(id):previous(id);
+ window.NOOR_ACADEMIC.__ccWrapped=true;
+}
+const obs=new MutationObserver(()=>{installRouter();ensureNav();});
+document.addEventListener('DOMContentLoaded',()=>{installRouter();ensureViews();obs.observe($('mainNav')||document.body,{childList:true,subtree:true});ensureNav();});
+setInterval(()=>{installRouter();if(hasSchool())ensureNav();},1500);
+window.NOOR_COMMAND_CENTRE={refresh:renderDashboard,open:route};
+})();
