@@ -172,6 +172,66 @@ async function processQueue(req: Request, input: any) {
   return reply(200,{status:failed?"partial":"processed",processed:accepted+failed,accepted_by_provider:accepted,failed,message:"Accepted means the provider accepted the request; inbox delivery is not confirmed. At most 20 queued emails were processed in this request."});
 }
 
+async function testRule(req: Request, input: any) {
+  const { client, profile } = await getAuthClient(req);
+  const schoolId = str(input.school_id,80), ruleId = str(input.rule_id,80);
+  if (!/^[0-9a-f-]{36}$/i.test(schoolId) || !/^[0-9a-f-]{36}$/i.test(ruleId)) return reply(400,{error:"Invalid school or rule identifier."});
+  if (!await canManage(client,profile,schoolId,"manage_email_automation")) return reply(403,{error:"You are not authorised to test school automation rules."});
+  const {data:rule,error:ruleError} = await client.from("school_automation_rules")
+    .select("id,name,trigger_type,action_type,action_config,conditions,timezone,is_enabled")
+    .eq("school_id",schoolId).eq("id",ruleId).maybeSingle();
+  if (ruleError || !rule) return reply(404,{error:"Automation rule not found in the authorised school."});
+  const now=new Date();
+  let timezone=str(rule.timezone||"Asia/Kolkata",100);
+  try { new Intl.DateTimeFormat("en-US",{timeZone:timezone}).format(now); } catch { timezone="Asia/Kolkata"; }
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(now);
+  const dateParts:any=Object.fromEntries(parts.map((p:any)=>[p.type,p.value]));
+  const today=dateParts.year+"-"+dateParts.month+"-"+dateParts.day;
+  const afterHour=new Date(now.getTime()+60*60*1000).toISOString();
+  const plus3=new Date(now.getTime()+3*86400000).toISOString().slice(0,10);
+  let matches: any[]=[];
+  if (rule.trigger_type==="task_deadline_approaching" || rule.trigger_type==="task_overdue") {
+    const {data,error}=await client.from("school_tasks").select("id,title,due_at,status")
+      .eq("school_id",schoolId).in("status",["open","in_progress","blocked"]).not("due_at","is",null).order("due_at").limit(1000);
+    if(error)return reply(500,{error:"Could not test the rule because task data could not be read completely."});
+    matches=(data||[]).filter((t:any)=>rule.trigger_type==="task_deadline_approaching"
+      ? new Date(t.due_at).getTime()>now.getTime()&&new Date(t.due_at).getTime()<=new Date(afterHour).getTime()
+      : new Date(t.due_at).getTime()<now.getTime()).map((t:any)=>({id:t.id,title:t.title,deadline:t.due_at,status:t.status}));
+  } else if(rule.trigger_type==="daily_report_due") {
+    const [schedules,reports]=await Promise.all([
+      client.from("teacher_schedule_entries").select("id,teacher_id,class_id,section_id,status,topic")
+        .eq("school_id",schoolId).eq("schedule_date",today).eq("status","scheduled").limit(1500),
+      client.from("daily_teaching_reports").select("id,teacher_id,report_status")
+        .eq("school_id",schoolId).eq("report_date",today).in("report_status",["submitted","reviewed","approved"]).limit(1500)
+    ]);
+    if(schedules.error||reports.error)return reply(500,{error:"Could not test this rule because teaching-report records could not be read completely."});
+    const completed=new Set((reports.data||[]).map((x:any)=>x.teacher_id));
+    const unique=new Map<string,any>();
+    for(const t of schedules.data||[])if(!completed.has(t.teacher_id)&&!unique.has(t.teacher_id))unique.set(t.teacher_id,{id:t.teacher_id,title:"Daily teaching report pending",schedule_id:t.id});
+    matches=Array.from(unique.values());
+  } else if(rule.trigger_type==="exam_approaching") {
+    const {data,error}=await client.from("school_assessments").select("id,title,assessment_date,status")
+      .eq("school_id",schoolId).gte("assessment_date",today).lte("assessment_date",plus3).order("assessment_date").limit(500);
+    if(error)return reply(500,{error:"Could not test the rule because assessment records could not be read completely."});
+    matches=(data||[]).map((x:any)=>({id:x.id,title:x.title,date:x.assessment_date,status:x.status}));
+  } else if(rule.trigger_type==="syllabus_milestone_missed") {
+    const [units,progress]=await Promise.all([
+      client.from("syllabus_units").select("id,title,planned_completion_on,class_id,section_id,subject_id")
+        .eq("school_id",schoolId).eq("is_active",true).not("planned_completion_on","is",null).lt("planned_completion_on",today).limit(1500),
+      client.from("syllabus_progress").select("syllabus_unit_id,progress_status").eq("school_id",schoolId).eq("progress_status","completed").limit(3000)
+    ]);
+    if(units.error||progress.error)return reply(500,{error:"Could not test the rule because syllabus records could not be read completely."});
+    const complete=new Set((progress.data||[]).map((x:any)=>x.syllabus_unit_id));
+    matches=(units.data||[]).filter((x:any)=>!complete.has(x.id)).map((x:any)=>({id:x.id,title:x.title,planned_completion_on:x.planned_completion_on}));
+  }
+  return reply(200,{
+    status:"dry_run",rule_id:rule.id,rule_name:rule.name,trigger_type:rule.trigger_type,action_type:rule.action_type,
+    enabled:rule.is_enabled,reporting_timezone:timezone,run_at:now.toISOString(),match_count:matches.length,
+    matches:matches.slice(0,10),
+    message:"Dry-run only. No email, notification, task or official school record was created or changed."
+  });
+}
+
 async function schoolInsights(req: Request, input: any) {
   const { client, user, profile } = await getAuthClient(req);
   const schoolId = str(input.school_id,80);
@@ -260,6 +320,7 @@ Deno.serve(async (req: Request) => {
     if(action==="send_test")return await sendTest(req,input);
     if(action==="process_queue")return await processQueue(req,input);
     if(action==="retry_failed_email")return await retryFailedEmail(req,input);
+    if(action==="test_rule")return await testRule(req,input);
     if(action==="school_insights")return await schoolInsights(req,input);
     return reply(400,{error:"Unsupported school automation action."});
   } catch (e) {
