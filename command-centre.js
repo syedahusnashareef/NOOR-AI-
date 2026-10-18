@@ -250,8 +250,8 @@ async function saveTask(e){
   if(S.editTask){result=await db().from('school_tasks').update({...payload,created_by:S.editTask.created_by,school_id:schoolId()}).eq('id',S.editTask.id).select('id').single();}
   else result=await db().from('school_tasks').insert(payload).select('id').single();
   if(result.error)throw result.error;const id=result.data.id;
+  if(S.editTask){const del=await db().from('task_assignees').delete().eq('school_id',schoolId()).eq('task_id',id);if(del.error)throw del.error;}
   if(assignee){
-   if(S.editTask){const del=await db().from('task_assignees').delete().eq('school_id',schoolId()).eq('task_id',id);if(del.error)throw del.error;}
    const assigned=await db().from('task_assignees').insert({school_id:schoolId(),task_id:id,assignee_id:assignee,assigned_by:user().id,status:payload.status==='completed'?'completed':payload.status==='in_progress'?'in_progress':'assigned'});
    if(assigned.error)throw new Error('Task saved, but assignment failed: '+assigned.error.message);
   }
