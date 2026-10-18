@@ -82,7 +82,7 @@ function widgetAllowed(id){
   academic:['view_academic_reports','manage_dashboard'],syllabus:['view_academic_reports','manage_syllabus','manage_dashboard'],
   reports:['view_academic_reports','review_reports','manage_dashboard'],approvals:['view_students','manage_staff','manage_dashboard'],
   upcoming:['manage_meetings','view_academic_reports','manage_dashboard'],tasks:['manage_tasks','manage_dashboard'],
-  notices:['manage_notices','manage_dashboard'],email:['manage_email_automation'],intelligence:['view_academic_reports','manage_tasks','manage_meetings','manage_dashboard'],
+  notices:['manage_notices','manage_dashboard'],notifications:['manage_notices','manage_email_automation','manage_dashboard'],parent_communication:['manage_notices','manage_dashboard'],email:['manage_email_automation'],intelligence:['view_academic_reports','manage_tasks','manage_meetings','manage_dashboard'],
   fees_planned:['manage_dashboard']
  };
  return (access[id]||[]).some(k=>S.managerPerms.has(k));
