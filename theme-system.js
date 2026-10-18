@@ -123,9 +123,9 @@
       prefs.theme_key = button.dataset.themeChoice;
       scheduleSave();
     }));
-    $("#noorFontScale", container).addEventListener("change", event => { prefs.font_scale = event.target.value; scheduleSave(); });
-    $("#noorReducedMotion", container).addEventListener("change", event => { prefs.reduced_motion = event.target.checked; scheduleSave(); });
-    $("#noorResetAppearance", container).addEventListener("click", () => { prefs = { ...DEFAULT }; scheduleSave(); });
+    $(container, "#noorFontScale").addEventListener("change", event => { prefs.font_scale = event.target.value; scheduleSave(); });
+    $(container, "#noorReducedMotion").addEventListener("change", event => { prefs.reduced_motion = event.target.checked; scheduleSave(); });
+    $(container, "#noorResetAppearance").addEventListener("click", () => { prefs = { ...DEFAULT }; scheduleSave(); });
     renderSelected();
     status(app().user?.id ? "Your account appearance preferences." : "Sign in to sync appearance preferences.", "info");
   }
