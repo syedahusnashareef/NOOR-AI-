@@ -51,6 +51,11 @@ jobs:
           npm install --no-save playwright
           npx playwright install --with-deps chromium
 
+      - name: Verify public application shell controls
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: node scripts/app-shell-smoke.mjs
+
       - name: Verify account appearance themes
         env:
           SITE_URL: ${{ steps.deployment.outputs.page_url }}
