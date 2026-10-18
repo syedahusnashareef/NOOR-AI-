@@ -4,7 +4,7 @@
 const A=()=>window.NOOR_AI_APP||{}, db=()=>A().db, user=()=>A().user, profile=()=>A().profile, schoolId=()=>A().schoolId;
 const $=id=>document.getElementById(id), E=v=>(A().escapeHtml||((x)=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))))(v??'');
 const msg=(s,t='info')=>A().toast?A().toast(s,t):alert(s);
-const today=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const today=()=>{const parts=new Intl.DateTimeFormat('en-CA',{timeZone:S.timezone||'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day;};
 const fmt=d=>d?new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'Not set';
 const localInput=d=>{if(!d)return '';const x=new Date(d.getTime?d:new Date(d));x.setMinutes(x.getMinutes()-x.getTimezoneOffset());return x.toISOString().slice(0,16);};
 const btn=(id,label,cl='')=>'<button type="button" class="cc-btn '+cl+'" id="'+id+'">'+E(label)+'</button>';
@@ -20,11 +20,11 @@ const WIDGETS=[
  ['student_count','Students & enrolments','Live authorised student profiles'],['staff_count','Teachers & staff','Active school staff records'],['attendance','Today’s attendance','Attendance sessions and marked records'],['class_attendance','Class attendance','Class and section attendance summary'],['academic','Academic performance','Recorded assessment results and exam schedule'],['syllabus','Syllabus progress','Existing syllabus units and progress records'],['reports','Teaching reports','Daily report submission status'],['approvals','Pending approvals','Pending student records and existing approval work'],['upcoming','Upcoming events & exams','Saved calendar and assessment records'],['tasks','Tasks & deadlines','Open, overdue and approaching school tasks'],['notices','Announcements','Active school notices'],['email','Email status','Provider-backed email log status'],['intelligence','School intelligence','Facts and recommendations grounded in records'],['fees_planned','Fee management (planned)','Not active; no collection or dues metrics']
 ];
 const DEFAULT={widgets:['student_count','staff_count','attendance','class_attendance','tasks','upcoming','reports','syllabus','notices','intelligence'],hidden:[],sizes:{},dateRange:'7d'};
-const S={prefs:structuredClone(DEFAULT),catalog:[],staff:[],tasks:[],assignees:[],events:[],notices:[],reports:[],units:[],progress:[],assessments:[],logs:[],templates:[],rules:[],classes:[],sections:[],subjects:[],calendarMode:'week',calendarDate:new Date(),editTask:null,editEvent:null,managerAllowed:false,managerPerms:new Set()};
+const S={prefs:structuredClone(DEFAULT),catalog:[],staff:[],tasks:[],assignees:[],events:[],notices:[],reports:[],units:[],progress:[],assessments:[],logs:[],templates:[],rules:[],classes:[],sections:[],subjects:[],calendarMode:'week',calendarDate:new Date(),editTask:null,editEvent:null,managerAllowed:false,managerPerms:new Set(),timezone:'Asia/Kolkata'};
 const hasSchool=()=>Boolean(db()&&user()&&profile()&&schoolId());
 async function permitted(){
  if(!hasSchool())return false;
- if(ROLE_ALLOWED.includes(profile().role)||profile().role==='creator')return true;
+ if(ROLE_ALLOWED.includes(profile().role)||profile().role==='creator'||profile().role==='teacher')return true;
  if(profile().role!=='manager')return false;
  const r=await db().from('role_permissions').select('permission_key,is_allowed').eq('school_id',schoolId()).eq('role','manager').in('permission_key',['manage_dashboard','manage_tasks','manage_meetings','manage_email_automation','view_academic_reports','view_students','view_attendance','view_teacher_activity','review_reports','manage_syllabus','manage_notices','manage_staff']);
  S.managerPerms=new Set(r.error?[]:(r.data||[]).filter(x=>x.is_allowed).map(x=>x.permission_key));
@@ -40,12 +40,12 @@ async function ensureNav(){
  const nav=$('mainNav');if(!nav||menuBusy||!hasSchool())return;
  menuBusy=true;
  try{
-  const ok=await permitted(), manager=profile()?.role==='manager';
+  const ok=await permitted(), manager=profile()?.role==='manager', teacher=profile()?.role==='teacher';
   const wanted=ok?[
-   ...(!manager||['manage_dashboard','view_academic_reports','manage_tasks'].some(k=>S.managerPerms.has(k))?[['command-centre','⌘','School Command Centre']]:[]),
-   ...(!manager||S.managerPerms.has('manage_tasks')?[['school-tasks','✓','Tasks & Deadlines']]:[]),
-   ...(!manager||S.managerPerms.has('manage_meetings')?[['school-calendar','▦','School Calendar']]:[]),
-   ...(!manager||S.managerPerms.has('manage_email_automation')?[['email-automation','✉','Email Automation']]:[])
+   ...(!teacher&&(!manager||['manage_dashboard','view_academic_reports','manage_tasks'].some(k=>S.managerPerms.has(k)))?[['command-centre','⌘','School Command Centre']]:[]),
+   ...(!manager||S.managerPerms.has('manage_tasks')||teacher?[['school-tasks','✓','Tasks & Deadlines']]:[]),
+   ...(!manager||S.managerPerms.has('manage_meetings')||teacher?[['school-calendar','▦','School Calendar']]:[]),
+   ...(!teacher&&(!manager||S.managerPerms.has('manage_email_automation'))?[['email-automation','✉','Email Automation']]:[])
   ]:[];
   const existing=new Map(Array.from(nav.querySelectorAll('[data-cc-nav="1"]')).map(n=>[n.dataset.view,n]));
   if(!wanted.length){existing.forEach(n=>n.remove());return;}
@@ -98,7 +98,7 @@ async function savePref(scope='personal'){
  msg(scope==='school'?'School default layout saved for this school.':'Your dashboard layout is saved to Supabase.','success');
 }
 async function loadData(){
- const sid=schoolId(),d=db(),date=today(),now=new Date().toISOString(),next=new Date(Date.now()+30*86400000).toISOString(),week=new Date(Date.now()+7*86400000).toISOString();
+ const sid=schoolId(),d=db();const tzResult=await d.from('school_settings').select('timezone').eq('school_id',sid).maybeSingle();if(!tzResult.error&&tzResult.data?.timezone)S.timezone=tzResult.data.timezone;const date=today(),now=new Date().toISOString(),next=new Date(Date.now()+30*86400000).toISOString(),week=new Date(Date.now()+7*86400000).toISOString();
  const tasksQ=d.from('school_tasks').select('id,title,description,task_type,priority,status,class_id,section_id,starts_at,due_at,reminder_at,checklist,recurrence,created_by,created_at,completed_at').eq('school_id',sid).order('due_at',{ascending:true}).limit(300);
  const eventsQ=d.from('calendar_events').select('id,title,description,event_type,starts_at,ends_at,location,class_id,section_id,subject_id,teacher_id,status,recurrence,reminder_minutes,created_by').eq('school_id',sid).order('starts_at',{ascending:true}).limit(300);
  const tasks=await tasksQ; if(!tasks.error)S.tasks=tasks.data||[];
@@ -210,6 +210,7 @@ async function renderTasks(){
  $('view-school-tasks').innerHTML=shell('school-tasks','Tasks & deadlines','Create, assign, track, comment on, and complete school tasks. Changes are saved to the existing school_tasks and task_assignees tables.',btn('cc-task-refresh','Refresh tasks')+btn('cc-task-new','Create task','primary'));
  const body=$('school-tasks-body');body.innerHTML='<div class="cc-empty">Loading tasks…</div>';
  try{await loadData();body.innerHTML='<div class="cc-grid"><section class="cc-widget"><div class="cc-widget-head"><div><h3 id="cc-task-form-title">Create school task</h3><p>Deadlines and assignment status are persisted in Supabase.</p></div></div><form class="cc-form" id="cc-task-form"><div class="cc-form-grid">'+field('cc-task-title','Task title','text',true,'maxlength="180"')+sel('cc-task-priority','Priority',[['low','Low'],['normal','Normal'],['high','High'],['urgent','Urgent']],true)+field('cc-task-start','Start date and time','datetime-local')+field('cc-task-due','Deadline','datetime-local')+field('cc-task-reminder','Reminder time','datetime-local')+sel('cc-task-assignee','Assign to (teacher/staff)',[['','Unassigned'],...S.staff.map(x=>[x.id,(x.full_name||x.email)+' · '+x.role])])+sel('cc-task-status','Status',[['open','Not started'],['in_progress','In progress'],['blocked','Blocked'],['completed','Completed'],['cancelled','Cancelled']],true)+'</div>'+ta('cc-task-description','Description / instructions')+ta('cc-task-checklist','Checklist (one item per line)')+sel('cc-task-repeat','Recurrence',[['','No recurrence'],['daily','Daily'],['weekly','Weekly'],['monthly','Monthly']])+ '<div class="cc-row">'+btn('cc-task-save','Save task','primary')+btn('cc-task-cancel-edit','Cancel edit')+'</div><div id="cc-task-form-status"></div></form></section><section class="cc-widget"><div class="cc-widget-head"><div><h3>Task filters</h3><p>Filter saved task records by deadline and status.</p></div></div><div class="cc-form">'+sel('cc-task-filter','Status',[['all','All status'],['open','Not started'],['in_progress','In progress'],['blocked','Blocked'],['completed','Completed'],['cancelled','Cancelled']])+sel('cc-task-time-filter','Due date',[['all','All dates'],['overdue','Overdue'],['7d','Next 7 days'],['none','No deadline']])+'<div class="cc-note">Permission checks and task visibility are enforced by Supabase Row Level Security as well as this interface.</div></div></section></div><section class="cc-widget"><div class="cc-toolbar"><div><h3 style="font:800 15px Manrope;margin:0">School task list</h3><p class="cc-muted">Completed and cancelled tasks remain in history; they are not deleted.</p></div>'+btn('cc-task-refresh-2','Refresh list')+'</div><div id="cc-task-list" style="margin-top:12px"></div></section>';
+  const manageTaskView=await canManageTasks();if(!manageTaskView){body.querySelector('#cc-task-form')?.closest('section')?.classList.add('hidden');$('cc-task-new')?.remove();}
   const reset=()=>{$('cc-task-form').reset();S.editTask=null;$('cc-task-form-title').textContent='Create school task';$('cc-task-save').textContent='Save task';$('cc-task-form-status').innerHTML='';};
   $('cc-task-form').onsubmit=saveTask; $('cc-task-cancel-edit').onclick=reset; $('cc-task-new').onclick=()=>{reset();$('cc-task-title').focus();}; $('cc-task-refresh').onclick=renderTasks;$('cc-task-refresh-2').onclick=()=>{loadData().then(renderTaskRows).catch(e=>msg(e.message,'error'));};
   $('cc-task-filter').onchange=renderTaskRows;$('cc-task-time-filter').onchange=renderTaskRows;await renderTaskRows();
@@ -222,7 +223,7 @@ async function saveTask(e){
  const title=v('cc-task-title'),assignee=v('cc-task-assignee'),checklist=v('cc-task-checklist').split('\n').map(x=>x.trim()).filter(Boolean).map(x=>({text:x,done:false})),repeat=v('cc-task-repeat');
  if(!title)return setTaskStatus('','Task title is required.','error');
  if(repeat&&!v('cc-task-due'))return setTaskStatus('','Recurring tasks require a deadline so the next occurrence can be calculated.','error');
- const payload={school_id:schoolId(),created_by:user().id,title,description:v('cc-task-description')||null,task_type:'school',priority:v('cc-task-priority')||'normal',status:v('cc-task-status')||'open',starts_at:v('cc-task-start')?new Date(v('cc-task-start')).toISOString():null,due_at:v('cc-task-due')?new Date(v('cc-task-due')).toISOString():null,reminder_at:v('cc-task-reminder')?new Date(v('cc-task-reminder')).toISOString():null,checklist,recurrence:repeat?{frequency:repeat,timezone:'Asia/Kolkata'}:null};
+ const payload={school_id:schoolId(),created_by:user().id,title,description:v('cc-task-description')||null,task_type:'school',priority:v('cc-task-priority')||'normal',status:v('cc-task-status')||'open',starts_at:v('cc-task-start')?new Date(v('cc-task-start')).toISOString():null,due_at:v('cc-task-due')?new Date(v('cc-task-due')).toISOString():null,reminder_at:v('cc-task-reminder')?new Date(v('cc-task-reminder')).toISOString():null,checklist,recurrence:repeat?{frequency:repeat,timezone:S.timezone||'Asia/Kolkata'}:null};
  try{
   let result;
   if(S.editTask){result=await db().from('school_tasks').update({...payload,created_by:S.editTask.created_by,school_id:schoolId()}).eq('id',S.editTask.id).select('id').single();}
@@ -271,6 +272,7 @@ async function renderCalendar(){
  $('cc-calendar-prev').onclick=()=>{if(S.calendarMode==='day')S.calendarDate.setDate(S.calendarDate.getDate()-1);else if(S.calendarMode==='week')S.calendarDate.setDate(S.calendarDate.getDate()-7);else S.calendarDate.setMonth(S.calendarDate.getMonth()-1);renderCalendarBody();};
  $('cc-calendar-next').onclick=()=>{if(S.calendarMode==='day')S.calendarDate.setDate(S.calendarDate.getDate()+1);else if(S.calendarMode==='week')S.calendarDate.setDate(S.calendarDate.getDate()+7);else S.calendarDate.setMonth(S.calendarDate.getMonth()+1);renderCalendarBody();};
  $('cc-calendar-today').onclick=()=>{S.calendarDate=new Date();renderCalendarBody();};$('cc-calendar-refresh').onclick=renderCalendar; $('cc-calendar-new').onclick=()=>{$('cc-event-form').reset();S.editEvent=null;$('cc-event-form-title').textContent='Add a school event';};
+ const canEditCalendar=await canManageEvents();if(!canEditCalendar){$('cc-calendar-new')?.remove();$('cc-event-form')?.closest('section')?.classList.add('hidden');}
  $('cc-cal-mode').value=S.calendarMode;$('cc-cal-mode').onchange=()=>{S.calendarMode=v('cc-cal-mode');renderCalendarBody();};['cc-cal-type','cc-cal-status','cc-cal-class','cc-cal-section','cc-cal-subject','cc-cal-teacher'].forEach(id=>$(id).onchange=renderCalendarBody);
  $('cc-event-form').onsubmit=saveEvent;$('cc-event-cancel-edit').onclick=()=>{S.editEvent=null;$('cc-event-form').reset();$('cc-event-form-title').textContent='Add a school event';};
  await renderCalendarBody();
@@ -344,6 +346,7 @@ async function route(id){
  if(!ROUTES.includes(id))return false;
  if(!(await permitted())){msg('This section is only available to authenticated, authorised school leadership.','error');return true;}
  if(!hasSchool()){msg('Choose the active school workspace first.','error');return true;}
+ if(profile()?.role==='teacher'&&!['school-tasks','school-calendar'].includes(id)){msg('Teachers can open only their assigned task list and school calendar.','error');return true;}
  if(profile()?.role==='manager'){
   const required={'school-tasks':'manage_tasks','school-calendar':'manage_meetings','email-automation':'manage_email_automation'};
   const perm=required[id];
