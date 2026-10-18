@@ -107,6 +107,71 @@ async function sendTest(req: Request, input: any) {
   }
 }
 
+async function retryFailedEmail(req: Request, input: any) {
+  const { client, user, profile } = await getAuthClient(req);
+  const schoolId = str(input.school_id,80), emailId = str(input.email_id,80);
+  if (!/^[0-9a-f-]{36}$/i.test(schoolId) || !/^[0-9a-f-]{36}$/i.test(emailId)) return reply(400,{error:"Invalid school or email record."});
+  if (!await canManage(client,profile,schoolId,"manage_email_automation")) return reply(403,{error:"You are not authorised to retry school email."});
+  const {data:log,error} = await client.from("school_email_delivery_logs").select("id,status,attempt_count").eq("school_id",schoolId).eq("id",emailId).maybeSingle();
+  if (error || !log) return reply(404,{error:"Email log not found in this school."});
+  if (log.status!=="failed") return reply(409,{error:"Only failed email attempts can be retried."});
+  if (log.attempt_count>=3) return reply(409,{error:"Retry limit reached. Review the failure before creating a new approved message."});
+  const update=await client.from("school_email_delivery_logs").update({status:"queued",error_summary:null}).eq("school_id",schoolId).eq("id",emailId).eq("status","failed");
+  if (update.error) return reply(500,{error:"Could not safely requeue this email."});
+  return reply(200,{status:"queued",message:"Failed email requeued. Select Process queue to attempt delivery."});
+}
+
+async function processQueue(req: Request, input: any) {
+  const { client, user, profile } = await getAuthClient(req);
+  const schoolId = str(input.school_id,80);
+  if (!/^[0-9a-f-]{36}$/i.test(schoolId)) return reply(400,{error:"Select the active school workspace."});
+  if (!await canManage(client,profile,schoolId,"manage_email_automation")) return reply(403,{error:"You are not authorised to process school email."});
+  const {data:rows,error} = await client.from("school_email_delivery_logs")
+    .select("id,recipient_email,subject,body_html,attempt_count,idempotency_key")
+    .eq("school_id",schoolId).eq("status","queued").lt("attempt_count",3).order("created_at").limit(20);
+  if (error) return reply(500,{error:"Could not read the authorised email queue."});
+  const providerKey=Deno.env.get("BREVO_API_KEY"), senderEmail=Deno.env.get("EMAIL_FROM");
+  const senderName=Deno.env.get("EMAIL_FROM_NAME")||"NOOR AI";
+  if (!providerKey || !senderEmail) {
+    for (const row of rows||[]) await client.from("school_email_delivery_logs").update({
+      status:"failed",attempt_count:Math.min(3,(row.attempt_count||0)+1),last_attempt_at:new Date().toISOString(),
+      error_summary:"EMAIL_PROVIDER_NOT_CONFIGURED: set BREVO_API_KEY and EMAIL_FROM in Supabase Edge Function secrets."
+    }).eq("school_id",schoolId).eq("id",row.id).eq("status","queued");
+    return reply(503,{status:"failed",processed:0,failed:(rows||[]).length,message:"Email provider is not configured. Queue rows were marked failed instead of being reported as sent."});
+  }
+  let accepted=0,failed=0;
+  for (const row of rows||[]) {
+    const nextAttempt=(row.attempt_count||0)+1;
+    const claim=await client.from("school_email_delivery_logs").update({
+      status:"retrying",attempt_count:nextAttempt,last_attempt_at:new Date().toISOString(),error_summary:null
+    }).eq("school_id",schoolId).eq("id",row.id).eq("status","queued").select("id").maybeSingle();
+    if (claim.error || !claim.data) continue; // another worker claimed this row or RLS rejected the claim
+    try {
+      const bodyHtml=str(row.body_html||"",18000);
+      const response=await fetch("https://api.brevo.com/v3/smtp/email",{
+        method:"POST",headers:{"accept":"application/json","api-key":providerKey,"content-type":"application/json"},
+        body:JSON.stringify({sender:{name:senderName,email:senderEmail},to:[{email:row.recipient_email}],subject:str(row.subject,250),
+          htmlContent:bodyHtml||"<p>"+enc(str(row.subject,250))+"</p>",textContent:bodyHtml.replace(/<[^>]*>/g," ").slice(0,4000)||str(row.subject,250)})
+      });
+      const raw=await response.text();let result:any={};try{result=JSON.parse(raw);}catch{result={};}
+      if(!response.ok) {
+        failed++;
+        await client.from("school_email_delivery_logs").update({status:nextAttempt>=3?"failed":"failed",error_summary:"Brevo returned HTTP "+response.status+". Check verified sender, API access and provider limits."})
+          .eq("school_id",schoolId).eq("id",row.id);
+      } else {
+        accepted++;
+        await client.from("school_email_delivery_logs").update({status:"sent",provider_message_id:str(result.messageId||result.message_id||"",500)||null,
+          accepted_at:new Date().toISOString(),error_summary:null}).eq("school_id",schoolId).eq("id",row.id);
+      }
+    } catch {
+      failed++;
+      await client.from("school_email_delivery_logs").update({status:"failed",error_summary:"Email provider request failed before a successful response was confirmed."})
+        .eq("school_id",schoolId).eq("id",row.id);
+    }
+  }
+  return reply(200,{status:failed?"partial":"processed",processed:accepted+failed,accepted_by_provider:accepted,failed,message:"Accepted means the provider accepted the request; inbox delivery is not confirmed. At most 20 queued emails were processed in this request."});
+}
+
 async function schoolInsights(req: Request, input: any) {
   const { client, user, profile } = await getAuthClient(req);
   const schoolId = str(input.school_id,80);
@@ -193,6 +258,8 @@ Deno.serve(async (req: Request) => {
     let input:any;try{input=JSON.parse(raw);}catch{return reply(400,{error:"Invalid JSON request body."});}
     const action=str(input.action,40);
     if(action==="send_test")return await sendTest(req,input);
+    if(action==="process_queue")return await processQueue(req,input);
+    if(action==="retry_failed_email")return await retryFailedEmail(req,input);
     if(action==="school_insights")return await schoolInsights(req,input);
     return reply(400,{error:"Unsupported school automation action."});
   } catch (e) {
