@@ -56,3 +56,23 @@ The following versions are recorded in the live project and their SQL source is 
 - `20261015203803_ticket07_protect_school_verification_and_leadership_memberships.sql`
 
 The database test smoke script is `supabase/tests/ticket07_security.sql`. The private platform-admin allow-list intentionally has no client-facing RLS policy or direct table grants. Bootstrap a trusted platform administrator only from the Supabase SQL Editor under project-owner access after verifying the Auth account; never from public signup.
+
+
+## School Command Centre additions (18 October 2026)
+
+The live NOOR AI project has the following additive Command Centre migrations mirrored in this repository:
+- `20261018104846_school_command_centre.sql` — dashboard preferences, task metadata/history/comments/attachments, automation rules/runs, templates, delivery logs and reminders. Existing schools, profiles, tasks, events and academic tables are reused.
+- `20261018105400_enable_school_task_reminders_scheduler.sql` — pg_cron task reminder scheduler.
+- `20261018105712_school_command_centre_automation_engine.sql` — idempotent rule evaluation, email/notification/task actions and school-local date windows.
+- `20261018110225_school_command_centre_recurring_tasks_and_calendar_filters.sql` — recurring task instances and class/section/subject/teacher calendar context checks.
+- `20261018111303_school_task_attachment_storage.sql` — private attachment bucket and school/task-scoped Storage policies.
+
+The active scheduler jobs are `noor-cc-task-reminders`, `noor-cc-automation-rules`, and `noor-cc-recurring-tasks` (each runs every minute). Queue processing is idempotent; queued work is not described as delivered until the provider returns a successful response.
+
+### Command Centre server-side secrets
+
+Set these in Supabase **Edge Function Secrets**, never in `config.js` or client code:
+- `BREVO_API_KEY` and `EMAIL_FROM` (verified sender); `EMAIL_FROM_NAME` is optional.
+- `AI_PROVIDER_API_KEY` is optional for AI-assisted School Intelligence. Without it, the endpoint returns database-derived signals and does not claim an AI summary was generated.
+
+Use the Email Automation page to send a test only to the signed-in verified account. Provider acceptance is not proof of inbox delivery. Fee Management remains planned; no fake financial metrics or payment tables are created.
