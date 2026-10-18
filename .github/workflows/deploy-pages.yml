@@ -32,7 +32,7 @@ jobs:
       - name: Assemble only the public website files
         run: |
           mkdir -p _site/sounds
-          cp index.html academic.js academic.css academic-extras.js config.js command-centre.js command-centre.css _site/
+          cp index.html academic.js academic.css academic-extras.js config.js command-centre.js command-centre.css theme-system.js theme-system.css _site/
           cp -R sounds/. _site/sounds/
           touch _site/.nojekyll
 
