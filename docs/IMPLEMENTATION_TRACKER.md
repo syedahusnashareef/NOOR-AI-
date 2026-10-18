@@ -1,6 +1,6 @@
 # NOOR AI Implementation Tracker
 
-Last updated: 2026-10-16 (verified live migrations and policy hardening)
+Last updated: 2026-10-18 (current live verification; see the newest section at the end)
 
 This tracker separates live database work from frontend features that are still prototypes or awaiting end-to-end tests.
 
@@ -8,8 +8,8 @@ This tracker separates live database work from frontend features that are still 
 - [x] Created and verified the separate Supabase project NOOR-AI (npzedchxfurcphvpjock) in the Mumbai region.
 - [x] Confirmed project state ACTIVE_HEALTHY.
 - [x] Connected the unified frontend to the project using a browser-safe publishable key.
-- [x] Confirmed there are no Supabase security-advisor findings after the current migrations.
-- [x] Re-ran the performance advisor: no remaining unindexed-foreign-key or overlapping-permissive-policy findings; unused-index notices remain because the database is empty.
+- [!] Historical 2026-10-16 clean-advisor claim is superseded: see the 2026-10-18 security review at the end of this tracker.
+- [!] Historical 2026-10-16 performance claim is superseded; the latest review found index and policy advisories and applied a reviewed index cleanup. See the latest section.
 - [ ] Provision the first trusted Platform Creator account using a secure account-setup process.
 - [ ] Create and verify the first school workspace and its Headmaster account.
 - [ ] Add automated cross-school authorization tests before onboarding real schools.
@@ -74,7 +74,7 @@ This tracker separates live database work from frontend features that are still 
 
 ## Deployment and safety
 - [x] GitHub Pages deployment is live at https://syedahusnashareef.github.io/NOOR-AI-/.
-- [x] Security advisor check is clean as of 2026-10-16.
+- [!] The 2026-10-16 security check is a historical snapshot, not the current status. See the latest section below.
 - [ ] Resolve performance-advisor foreign-key index warnings for the full schema.
 - [ ] Run end-to-end tests before treating the website as production-ready.
 - [ ] Never commit Supabase service-role keys, passwords or AI/email provider secrets.
@@ -179,10 +179,37 @@ This section records the latest concrete follow-up changes. The production-facin
 - [x] Verified all four Ticket 07 migrations are recorded in the live Supabase migration history.
 
 ### Not yet proven / production blockers
-- [ ] There are currently zero Auth users, profiles, schools and school memberships in this project. Therefore cross-school tests with real School A/School B accounts, promotion attempts, removal/re-login, and invitation expiry/reuse could not be run honestly.
+- [ ] The 2026-10-16 zero-record statement is stale. The 2026-10-18 check found some setup records, but no verified active school and no separate multi-role/multi-school test matrix. Cross-school tests, role-promotion attempts, removal/re-login and invitation expiry/reuse remain unproven.
 - [ ] The first Platform Creator account must be bootstrapped securely by the project owner: create and verify the account through Supabase Auth, then set its profile role to `creator` and insert its Auth user ID into `private.platform_admins` using the Supabase SQL Editor under trusted project-owner access. Never expose this bootstrap to public signup or frontend code.
 - [ ] The school “Mark email verified” control records an authorised human attestation after independent verification; it is not an automatic email challenge. A real email verification provider/workflow is still required for fully automated proof.
 - [ ] Supabase Auth dashboard settings for email confirmations, password policy, rate limits and JWT/session lifetime still need an explicit production review; those settings were not readable/changed through the available connector.
 - [ ] Clean-database replay of the full historical migration chain and real browser/API/storage end-to-end tests remain outstanding. This is not yet a production acceptance sign-off.
 
 **Status: security hardening deployed and smoke-tested; real multi-account acceptance tests are blocked until a trusted Platform Creator is provisioned and two test schools have data.**
+
+
+## Task 7 — Appearance, notice delivery path and 2026-10-18 re-audit
+
+### Implemented and checked
+- [x] Added the Appearance Studio with eight account-level themes, text-size and reduced-motion choices.
+- [x] Added `user_theme_preferences` with a unique user key, RLS enabled and SELECT/INSERT/UPDATE policies restricted to `auth.uid()`.
+- [x] Added Appearance Studio assets to the Pages deployment allow-list and added a Playwright theme smoke test.
+- [x] Added notice creation/open shortcuts to the School Command Centre and Creator Master Control Centre.
+- [x] Added School Notices links to student and parent/guardian navigation.
+- [x] Scoped student/teacher notice queries to active notices aimed at their role and within the publish/expiry window; the existing database read policy also enforces the school/role/time boundary.
+- [x] Expanded “Everyone at school” notice targeting to include school owners and parent/guardian role accounts.
+- [x] Ran static JavaScript parse checks for both inline app scripts and the main application, academic, Command Centre, theme and sound modules.
+- [x] Added covering indexes for 19 application foreign keys flagged by the performance advisor and removed 17 exact duplicate, non-unique indexes after comparing their actual index definitions. The latest advisor no longer reports unindexed foreign keys or duplicate indexes.
+- [x] Confirmed that all 46 public base tables have RLS enabled.
+
+### Current findings and remaining release gates
+- [ ] Enable leaked-password protection in Supabase Auth dashboard settings; this setting is not manageable through the currently connected database tools.
+- [ ] Complete the browser test matrix with separate Creator, Owner/Principal, restricted Manager, Teacher, Student and Parent/Guardian accounts and at least two schools.
+- [ ] Reconcile Supabase's applied migration history with SQL files in this repository. The database currently has more applied migration records than matching migration source files; clean-project replay is not proven.
+- [ ] Review multiple permissive-policy advisories. The current overlapping policies include intentional Creator-versus-school-role access paths; do not delete them without preserving equivalent checks and testing each role.
+- [ ] Review the two SECURITY DEFINER-function advisories. The currently inspected functions have explicit Creator checks and are used by the frontend; keep those checks and test authorization before changing their grants.
+- [ ] Review remaining unused-index notices after meaningful production-like data and query workload exist; do not delete indexes solely because a new, low-volume database has no scans.
+- [ ] Confirm the latest GitHub Pages run passes both the new Appearance Studio smoke test and the existing sound-engine smoke test.
+- [ ] Configure and test the email provider/sender before treating an in-app notice as an email.
+
+**Status after the 2026-10-18 review:** account-level themes and notice entry points are implemented; FK-index and duplicate-index alerts were resolved. The product is still not production-accepted until Auth configuration, migration-source parity and real multi-account/multi-school tests are complete.
