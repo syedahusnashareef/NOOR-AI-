@@ -6,6 +6,10 @@ if (!siteUrl) throw new Error("SITE_URL is required");
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 const consoleErrors = [];
+const httpErrors = [];
+page.on("response", response => {
+  if (response.status() >= 400) httpErrors.push({ status: response.status(), url: response.url() });
+});
 page.on("console", message => {
   if (message.type() === "error") consoleErrors.push(message.text());
 });
@@ -16,6 +20,14 @@ try {
   if (!response || !response.ok()) throw new Error(`Live page HTTP status: ${response?.status() ?? "no response"}`);
 
   await page.waitForSelector("#noorSoundQuickControl", { state: "visible", timeout: 20000 });
+  // Verify the Command Centre assets are part of the deployed public artifact too.
+  const ccAssetResponses = await Promise.all([
+    page.request.get(new URL("command-centre.js", siteUrl).toString()),
+    page.request.get(new URL("command-centre.css", siteUrl).toString())
+  ]);
+  for (const assetResponse of ccAssetResponses) {
+    if (!assetResponse.ok()) throw new Error(`Command Centre asset failed to load: ${assetResponse.status()} ${assetResponse.url()}`);
+  }
   await page.waitForFunction(() => !!window.NOOR_SOUND?.playSound, { timeout: 20000 });
 
   // The first genuine user gesture unlocks browser audio.
@@ -70,6 +82,7 @@ try {
 
   // Restore default ON in this test context before final checks.
   await page.evaluate(() => window.NOOR_SOUND.setPreferences({ masterSound: true }));
+  if (httpErrors.length) throw new Error(`HTTP resource errors: ${JSON.stringify(httpErrors)}`);
   if (consoleErrors.length) throw new Error(`Browser console errors: ${consoleErrors.join(" | ")}`);
 
   console.log(JSON.stringify({
