@@ -20,7 +20,7 @@ const WIDGETS=[
  ['student_count','Students & enrolments','Live authorised student profiles'],['staff_count','Teachers & staff','Active school staff records'],['attendance','Today’s attendance','Attendance sessions and marked records'],['class_attendance','Class attendance','Class and section attendance summary'],['academic','Academic performance','Recorded assessment results and exam schedule'],['syllabus','Syllabus progress','Existing syllabus units and progress records'],['reports','Teaching reports','Daily report submission status'],['approvals','Pending approvals','Pending student records and existing approval work'],['upcoming','Upcoming events & exams','Saved calendar and assessment records'],['tasks','Tasks & deadlines','Open, overdue and approaching school tasks'],['notices','Announcements','Active school notices'],['email','Email status','Provider-backed email log status'],['intelligence','School intelligence','Facts and recommendations grounded in records'],['fees_planned','Fee management (planned)','Not active; no collection or dues metrics']
 ];
 const DEFAULT={widgets:['student_count','staff_count','attendance','class_attendance','tasks','upcoming','reports','syllabus','notices','intelligence'],hidden:[],sizes:{},dateRange:'7d'};
-const S={prefs:structuredClone(DEFAULT),catalog:[],staff:[],tasks:[],assignees:[],events:[],notices:[],reports:[],units:[],progress:[],assessments:[],logs:[],templates:[],rules:[],classes:[],sections:[],calendarMode:'week',calendarDate:new Date(),editTask:null,editEvent:null,managerAllowed:false};
+const S={prefs:structuredClone(DEFAULT),catalog:[],staff:[],tasks:[],assignees:[],events:[],notices:[],reports:[],units:[],progress:[],assessments:[],logs:[],templates:[],rules:[],classes:[],sections:[],calendarMode:'week',calendarDate:new Date(),editTask:null,editEvent:null,managerAllowed:false,managerPerms:new Set()};
 const hasSchool=()=>Boolean(db()&&user()&&profile()&&schoolId());
 async function permitted(){
  if(!hasSchool())return false;
@@ -63,7 +63,24 @@ async function personalPref(){
   db().from('school_dashboard_preferences').select('layout_json').eq('school_id',schoolId()).eq('scope','personal').eq('user_id',user().id).maybeSingle()
  ]);
  let raw=personal.data?.layout_json||school.data?.layout_json;
- if(raw&&typeof raw==='object')S.prefs={...structuredClone(DEFAULT),...raw,widgets:Array.isArray(raw.widgets)?raw.widgets.filter(id=>WIDGETS.some(w=>w[0]===id)):DEFAULT.widgets.slice(),hidden:Array.isArray(raw.hidden)?raw.hidden:[],sizes:raw.sizes&&typeof raw.sizes==='object'?raw.sizes:{}};
+ if(raw&&typeof raw==='object')S.prefs={...structuredClone(DEFAULT),...raw,widgets:Array.isArray(raw.widgets)?raw.widgets.filter(id=>WIDGETS.some(w=>w[0]===id)&&widgetAllowed(id)):DEFAULT.widgets.filter(widgetAllowed),hidden:Array.isArray(raw.hidden)?raw.hidden.filter(widgetAllowed):[],sizes:raw.sizes&&typeof raw.sizes==='object'?raw.sizes:{}};
+ else S.prefs.widgets=DEFAULT.widgets.filter(widgetAllowed);
+}
+function widgetAllowed(id){
+ const role=profile()?.role;
+ if(['owner','principal','creator'].includes(role))return true;
+ if(role!=='manager')return false;
+ const access={
+  student_count:['view_students','manage_staff','view_academic_reports','manage_dashboard'],
+  staff_count:['view_teacher_activity','manage_staff','manage_dashboard'],
+  attendance:['view_attendance','manage_dashboard'],class_attendance:['view_attendance','manage_dashboard'],
+  academic:['view_academic_reports','manage_dashboard'],syllabus:['view_academic_reports','manage_syllabus','manage_dashboard'],
+  reports:['view_academic_reports','review_reports','manage_dashboard'],approvals:['view_students','manage_staff','manage_dashboard'],
+  upcoming:['manage_meetings','view_academic_reports','manage_dashboard'],tasks:['manage_tasks','manage_dashboard'],
+  notices:['manage_notices','manage_dashboard'],email:['manage_email_automation'],intelligence:['view_academic_reports','manage_tasks','manage_meetings','manage_dashboard'],
+  fees_planned:['manage_dashboard']
+ };
+ return (access[id]||[]).some(k=>S.managerPerms.has(k));
 }
 async function savePref(scope='personal'){
  const row={school_id:schoolId(),user_id:scope==='personal'?user().id:null,scope,layout_json:S.prefs};
@@ -126,6 +143,7 @@ function metric(label,value,note=''){
  return '<div class="cc-metric"><span>'+E(label)+'</span><strong>'+E(value)+'</strong><small>'+E(note)+'</small></div>';
 }
 function widgetMarkup(id,data){
+ if(!widgetAllowed(id))return '';
  const title=(WIDGETS.find(w=>w[0]===id)||[id,id,''])[1],note=(WIDGETS.find(w=>w[0]===id)||['','',''])[2];
  let body='',wide=false;
  if(id==='student_count') body='<div class="cc-metrics">'+metric('All registered students',data.studentTotal,'Existing student profiles')+metric('Active enrolments',data.activeStudents,'Active student accounts')+metric('Pending approval',data.pendingStudents,'Awaiting school review')+'</div>';
@@ -133,7 +151,7 @@ function widgetMarkup(id,data){
  else if(id==='attendance')body='<div class="cc-metrics">'+metric('Marked today',data.attendanceMarked,'Attendance records saved today')+metric('Present',data.present,'Marked present')+metric('Absent',data.absent,'Marked absent')+'</div><p class="cc-muted">'+(data.attendanceSessions.length?data.attendanceSessions.length+' attendance session(s); '+data.attendanceMissing+' still in draft.':'No attendance sessions recorded for today.')+'</p>';
  else if(id==='class_attendance'){wide=true;body=data.attendanceSessions.length?'<div class="cc-line-list">'+data.attendanceSessions.map(s=>{const rows=data.attendance.filter(r=>r.session_id===s.id),klass=S.classes.find(c=>c.id===s.class_id),sec=S.sections.find(c=>c.id===s.section_id);const present=rows.filter(r=>r.status==='present').length,pct=rows.length?Math.round(100*present/rows.length):0;return '<div><div class="cc-toolbar"><b>'+E(klass?.name||'Class')+(sec?' · '+E(sec.name):'')+'</b>'+chip(s.status==='submitted'?'Submitted':s.status,'warn')+'</div><div class="cc-bar"><i style="width:'+pct+'%"></i></div><small class="cc-muted">'+present+' present / '+rows.filter(r=>r.status==='absent').length+' absent / '+rows.length+' marked</small></div>';}).join('')+'</div>':listEmpty('No class attendance sessions were saved for today.')};
  else if(id==='tasks'){const rows=[...data.overdue.slice(0,4),...data.dueSoon.filter(t=>!data.overdue.some(o=>o.id===t.id)).slice(0,3)];body='<div class="cc-metrics">'+metric('Overdue',data.overdue.length,'Open tasks past deadline')+metric('Due in 7 days',data.dueSoon.length,'Not completed or cancelled')+metric('All open',S.tasks.filter(t=>!['completed','cancelled','archived'].includes(t.status)).length,'In this school scope')+'</div><div class="cc-line-list" style="margin-top:12px">'+(rows.length?rows.map(t=>'<div class="cc-list-item"><div><b>'+E(t.title)+'</b><small>'+(t.due_at?'Due '+E(fmt(t.due_at)):'No deadline')+' · '+E(t.status)+'</small></div>'+chip(t.priority,t.priority==='urgent'||t.priority==='high'?'bad':'')+'</div>').join(''):listEmpty('No overdue or approaching task deadlines in saved records.'))+'</div><div class="cc-row" style="margin-top:12px">'+btn('cc-open-tasks','Manage tasks','primary')+'</div>'};
- else if(id==='upcoming'){wide=true;const rows=[...data.upcomingEvents.map(e=>({title:e.title,date:e.starts_at,type:e.event_type,detail:e.location||e.description||''})),...S.assessments.map(e=>({title:e.title,date:e.assessment_date,type:e.assessment_type,detail:S.classes.find(c=>c.id===e.class_id)?.name||''}))].sort((a,b)=>new Date(a.date)-new Date(b.date).getTime()).slice(0,8);body=rows.length?'<div class="cc-line-list">'+rows.map(e=>'<div class="cc-list-item"><div><b>'+E(e.title)+'</b><small>'+E(fmt(e.date))+' · '+E(e.type||'event')+(e.detail?' · '+E(e.detail):'')+'</small></div>'+chip('Upcoming')+'</div>').join('')+'</div>':listEmpty('No upcoming calendar events or assessments are saved for the next 30 days.')};
+ else if(id==='upcoming'){wide=true;const horizon=S.prefs.dateRange==='today'?1:S.prefs.dateRange==='7d'?7:30;const cutoff=Date.now()+horizon*86400000;const rows=[...data.upcomingEvents.filter(e=>new Date(e.starts_at).getTime()<=cutoff).map(e=>({title:e.title,date:e.starts_at,type:e.event_type,detail:e.location||e.description||''})),...S.assessments.filter(e=>new Date(e.assessment_date+'T23:59:59').getTime()<=cutoff).map(e=>({title:e.title,date:e.assessment_date,type:e.assessment_type,detail:S.classes.find(c=>c.id===e.class_id)?.name||''}))].sort((a,b)=>new Date(a.date)-new Date(b.date).getTime()).slice(0,8);body=rows.length?'<div class="cc-line-list">'+rows.map(e=>'<div class="cc-list-item"><div><b>'+E(e.title)+'</b><small>'+E(fmt(e.date))+' · '+E(e.type||'event')+(e.detail?' · '+E(e.detail):'')+'</small></div>'+chip('Upcoming')+'</div>').join('')+'</div>':listEmpty('No upcoming calendar events or assessments are saved for the next 30 days.')};
  else if(id==='reports')body='<div class="cc-metrics">'+metric('Reports today',data.totalReports,'Teacher daily report records')+metric('Submitted / reviewed',data.submittedReports,'Recorded submission status')+metric('No submitted report',data.missingReports,'Active teachers not represented in submitted reports')+'</div><p class="cc-muted">The final number is a simple gap indicator, not a judgement. Teachers with no scheduled lesson or approved leave may need no report.</p>';
  else if(id==='syllabus'){const pct=data.totalUnits?Math.round(100*data.completedUnits/data.totalUnits):0;body='<div class="cc-metrics">'+metric('Active syllabus units',data.totalUnits,'From the existing syllabus')+metric('Completed units',data.completedUnits,'Progress status = completed')+metric('Completion',data.totalUnits?pct+'%':'—',data.totalUnits?'Derived from saved progress':'No active syllabus units found')+'</div><div class="cc-bar"><i style="width:'+pct+'%"></i></div><p class="cc-muted">Progress values are based only on existing syllabus records.</p>'};
  else if(id==='academic'){wide=true;body='<div class="cc-metrics">'+metric('Upcoming assessments',S.assessments.length,'Next 30 days')+metric('Exams / tests',data.upcomingExams.length,'Saved exam and test schedule')+metric('Results', 'Open academic module','No synthetic score average is shown')+'</div><p class="cc-muted">Assessment results and averages remain inside the existing academic module so that no score is inferred without an approved reporting definition.</p>'};
@@ -155,7 +173,7 @@ async function renderDashboard(){
   const hero=$('view-command-centre').querySelector('.cc-hero-actions');if(hero)hero.innerHTML=btn('cc-refresh','Refresh data','primary')+btn('cc-manage-widgets','Customise widgets')+btn('cc-reset','Restore default')+((ROLE_ALLOWED.includes(profile().role)||profile().role==='creator')?btn('cc-save-school-default','Save school default','gold'):'');
   target.innerHTML='<div class="cc-toolbar"><div><h2>Operational overview</h2><p class="cc-muted">'+E(fmt(data.loadedAt))+' · '+E(A().school?.name||profile()?.school_id||'Active school')+'</p></div><div class="cc-row"><label class="cc-muted" for="cc-date-range">Reporting range</label><select id="cc-date-range" class="cc-filter"><option value="today">Today</option><option value="7d">Next 7 days</option><option value="30d">Next 30 days</option></select></div></div><div id="cc-widget-grid" class="cc-grid" style="margin-top:13px">'+S.prefs.widgets.map(id=>widgetMarkup(id,data)).join('')+'</div><p class="cc-drag-hint">Tip: drag widgets to rearrange, use ↗ to resize, ◌ to hide and × to remove them from this layout. Hidden widgets never delete their data.</p>';
   $('cc-date-range').value=S.prefs.dateRange||'7d';
-  $('cc-date-range').onchange=async()=>{S.prefs.dateRange=v('cc-date-range');try{await savePref();}catch(e){msg(e.message,'error');}};
+  $('cc-date-range').onchange=async()=>{S.prefs.dateRange=v('cc-date-range');try{await savePref();await renderDashboard();}catch(e){msg(e.message,'error');}};
   $('cc-refresh').onclick=renderDashboard;$('cc-manage-widgets').onclick=openWidgetManager;$('cc-reset').onclick=async()=>{S.prefs=structuredClone(DEFAULT);try{await savePref();await renderDashboard();}catch(e){msg(e.message,'error');}};
   $('cc-save-school-default')?.addEventListener('click',async()=>{try{await savePref('school');}catch(e){msg(e.message,'error');}});
   target.querySelectorAll('[data-cc-hide]').forEach(b=>b.onclick=async()=>{const id=b.dataset.ccHide;S.prefs.hidden=S.prefs.hidden||[];S.prefs.hidden=S.prefs.hidden.includes(id)?S.prefs.hidden.filter(x=>x!==id):[...S.prefs.hidden,id];try{await savePref();await renderDashboard();}catch(e){msg(e.message,'error');}});
@@ -175,8 +193,9 @@ function bindDragDrop(){
  });
 }
 function openWidgetManager(){
+ const available=WIDGETS.filter(w=>widgetAllowed(w[0]));
  const inSet=new Set(S.prefs.widgets);
- const backdrop=document.createElement('div');backdrop.className='cc-modal-backdrop';backdrop.innerHTML='<section class="cc-modal" role="dialog" aria-modal="true" aria-labelledby="cc-widgets-title"><div class="cc-toolbar"><div><h2 id="cc-widgets-title">Customise dashboard widgets</h2><p class="cc-muted">Add or remove widgets from your layout. Hidden widgets stay in the catalogue. Fee Management remains planned until its module is implemented.</p></div><button class="cc-btn" id="cc-widgets-close">Close</button></div><div class="cc-widget-catalog" style="margin:15px 0">'+WIDGETS.map(w=>'<label class="cc-catalog-item"><input type="checkbox" data-cc-pick="'+w[0]+'" '+(inSet.has(w[0])?'checked':'')+'><span><b>'+E(w[1])+'</b><small class="cc-muted">'+E(w[2])+'</small></span></label>').join('')+'</div><div class="cc-row">'+btn('cc-widgets-apply','Save widget selection','primary')+btn('cc-widgets-default','Reset selection')+'</div></section>';
+ const backdrop=document.createElement('div');backdrop.className='cc-modal-backdrop';backdrop.innerHTML='<section class="cc-modal" role="dialog" aria-modal="true" aria-labelledby="cc-widgets-title"><div class="cc-toolbar"><div><h2 id="cc-widgets-title">Customise dashboard widgets</h2><p class="cc-muted">Add or remove widgets from your layout. Hidden widgets stay in the catalogue. Fee Management remains planned until its module is implemented.</p></div><button class="cc-btn" id="cc-widgets-close">Close</button></div><div class="cc-widget-catalog" style="margin:15px 0">'+available.map(w=>'<label class="cc-catalog-item"><input type="checkbox" data-cc-pick="'+w[0]+'" '+(inSet.has(w[0])?'checked':'')+'><span><b>'+E(w[1])+'</b><small class="cc-muted">'+E(w[2])+'</small></span></label>').join('')+'</div><div class="cc-row">'+btn('cc-widgets-apply','Save widget selection','primary')+btn('cc-widgets-default','Reset selection')+'</div></section>';
  document.body.appendChild(backdrop);const close=()=>backdrop.remove();$('cc-widgets-close').onclick=close;backdrop.addEventListener('click',e=>{if(e.target===backdrop)close();});
  $('cc-widgets-default').onclick=()=>{backdrop.querySelectorAll('[data-cc-pick]').forEach(c=>c.checked=DEFAULT.widgets.includes(c.dataset.ccPick));};
  $('cc-widgets-apply').onclick=async()=>{S.prefs.widgets=Array.from(backdrop.querySelectorAll('[data-cc-pick]:checked')).map(c=>c.dataset.ccPick);S.prefs.hidden=(S.prefs.hidden||[]).filter(x=>S.prefs.widgets.includes(x));try{await savePref();close();await renderDashboard();}catch(e){msg(e.message,'error');}};
@@ -219,7 +238,7 @@ async function renderTaskRows(){
  box.querySelectorAll('[data-cc-task-status]').forEach(s=>s.onchange=async()=>{if(!s.value)return;try{const next=s.value;const u=await db().from('school_tasks').update({status:next}).eq('school_id',schoolId()).eq('id',s.dataset.ccTaskStatus);if(u.error)throw u.error;await db().from('task_assignees').update({status:next==='completed'?'completed':next==='in_progress'?'in_progress':'assigned',status_updated_at:new Date().toISOString()}).eq('school_id',schoolId()).eq('task_id',s.dataset.ccTaskStatus);msg('Task status updated.','success');await loadData();await renderTaskRows();}catch(e){msg(e.message,'error');}});
  box.querySelectorAll('[data-cc-task-comment]').forEach(b=>b.onclick=()=>openTaskComments(b.dataset.ccTaskComment));
 }
-function awaitCanTaskEdit(){return ROLE_ALLOWED.includes(profile()?.role)||profile()?.role==='creator'||(profile()?.role==='manager'&&S.managerAllowed);}
+function awaitCanTaskEdit(){return ROLE_ALLOWED.includes(profile()?.role)||profile()?.role==='creator'||(profile()?.role==='manager'&&S.managerPerms.has('manage_tasks'));}
 function editTask(id){const t=S.tasks.find(x=>x.id===id);if(!t)return;S.editTask=t;$('cc-task-form-title').textContent='Edit task';$('cc-task-save').textContent='Save changes';$('cc-task-title').value=t.title||'';$('cc-task-description').value=t.description||'';$('cc-task-priority').value=t.priority||'normal';$('cc-task-status').value=t.status||'open';$('cc-task-start').value=localInput(t.starts_at);$('cc-task-due').value=localInput(t.due_at);$('cc-task-reminder').value=localInput(t.reminder_at);$('cc-task-checklist').value=(Array.isArray(t.checklist)?t.checklist.map(x=>typeof x==='string'?x:x.text||''):[]).join('\n');$('cc-task-repeat').value=t.recurrence?.frequency||'';const a=S.assignees.find(x=>x.task_id===id);$('cc-task-assignee').value=a?.assignee_id||'';$('cc-task-title').focus();}
 async function openTaskComments(id){
  const task=S.tasks.find(t=>t.id===id);if(!task)return;
@@ -295,6 +314,12 @@ async function route(id){
  if(!ROUTES.includes(id))return false;
  if(!(await permitted())){msg('This section is only available to authenticated, authorised school leadership.','error');return true;}
  if(!hasSchool()){msg('Choose the active school workspace first.','error');return true;}
+ if(profile()?.role==='manager'){
+  const required={'school-tasks':'manage_tasks','school-calendar':'manage_meetings','email-automation':'manage_email_automation'};
+  const perm=required[id];
+  const dashboardOk=id!=='command-centre'||['manage_dashboard','view_academic_reports','manage_tasks'].some(k=>S.managerPerms.has(k));
+  if((perm&&!S.managerPerms.has(perm))||!dashboardOk){msg('Your Manager account does not have permission to open this section.','error');return true;}
+ }
  try{
   if(id==='command-centre')await renderDashboard();
   if(id==='school-tasks')await renderTasks();
