@@ -45,3 +45,28 @@ The deployed Edge Function is `noor-ai-academic-assistant`. Configure these thro
 - `AI_INPUT_COST_PER_1K_USD`, `AI_OUTPUT_COST_PER_1K_USD` — optional rate configuration for estimated usage costs.
 
 The function intentionally reports a configuration error when no provider key is configured. That is safer than pretending AI output has been generated.
+
+
+## School Command Centre additions (18 October 2026)
+
+Applied on the dedicated NOOR AI project; source migrations are mirrored in this branch:
+
+- `20261018104846_school_command_centre.sql` — layout preferences, task metadata/status history/comments/attachments, automation rules/runs, email templates/delivery logs and durable reminder records. Reuses the existing schools, profiles, task, calendar and academic tables.
+- `20261018105400_enable_school_task_reminders_scheduler.sql` — enables `pg_cron` and schedules the idempotent reminder queue.
+- `20261018105712_school_command_centre_automation_engine.sql` — secure rule-action runner, school context validation and scheduled operational triggers.
+- `20261018110225_school_command_centre_recurring_tasks_and_calendar_filters.sql` — scheduled recurring task instances; school/class/subject/teacher calendar context constraints; reminder handling for tasks without assignees.
+
+Active scheduler jobs verified in the live project: `noor-cc-task-reminders`, `noor-cc-automation-rules`, and `noor-cc-recurring-tasks`, each every minute. These jobs queue/record work; email is not marked sent until the provider responds.
+
+### Command Centre server-side secrets
+
+Configure these in Supabase **Edge Function Secrets** (never `config.js`, GitHub browser code, or a client bundle):
+
+- `BREVO_API_KEY` — Brevo transactional email API key.
+- `EMAIL_FROM` — verified sender address.
+- `EMAIL_FROM_NAME` — optional sender display name (defaults to `NOOR AI`).
+- `AI_PROVIDER_API_KEY` — optional for AI-assisted summaries; if absent, the secure insights endpoint returns verified, database-derived signals without claiming an AI summary was generated.
+
+Use the Email Automation page to send a test only to the currently signed-in verified account. Saving a template or enabling a rule does not prove email delivery. Provider acceptance is logged distinctly from verified inbox delivery. Configure the sender/domain authentication and school communication policy before enabling outward-facing rules.
+
+Fee Management remains a planned phase. No production invoice, payment, collected-fee or outstanding-balance data is created by this work.
