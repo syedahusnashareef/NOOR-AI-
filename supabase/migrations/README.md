@@ -56,6 +56,8 @@ Applied on the dedicated NOOR AI project; source migrations are mirrored in this
 - `20261018105712_school_command_centre_automation_engine.sql` — secure rule-action runner, school context validation and scheduled operational triggers.
 - `20261018110225_school_command_centre_recurring_tasks_and_calendar_filters.sql` — scheduled recurring task instances; school/class/subject/teacher calendar context constraints; reminder handling for tasks without assignees.
 
+- `20261018111303_school_task_attachment_storage.sql` — private bucket for task attachments; reads require school membership and task visibility, uploads are nested under school/task/uploader, and file links are short-lived signed URLs.
+
 Active scheduler jobs verified in the live project: `noor-cc-task-reminders`, `noor-cc-automation-rules`, and `noor-cc-recurring-tasks`, each every minute. These jobs queue/record work; email is not marked sent until the provider responds.
 
 ### Command Centre server-side secrets
