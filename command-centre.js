@@ -26,8 +26,9 @@ async function permitted(){
  if(!hasSchool())return false;
  if(ROLE_ALLOWED.includes(profile().role)||profile().role==='creator')return true;
  if(profile().role!=='manager')return false;
- const r=await db().from('role_permissions').select('permission_key,is_allowed').eq('school_id',schoolId()).eq('role','manager').in('permission_key',['manage_dashboard','manage_tasks','manage_meetings','manage_email_automation','view_academic_reports']);
- S.managerAllowed=!r.error&&(r.data||[]).some(x=>x.is_allowed);
+ const r=await db().from('role_permissions').select('permission_key,is_allowed').eq('school_id',schoolId()).eq('role','manager').in('permission_key',['manage_dashboard','manage_tasks','manage_meetings','manage_email_automation','view_academic_reports','view_students','view_attendance','view_teacher_activity','review_reports','manage_syllabus','manage_notices','manage_staff']);
+ S.managerPerms=new Set(r.error?[]:(r.data||[]).filter(x=>x.is_allowed).map(x=>x.permission_key));
+ S.managerAllowed=S.managerPerms.size>0;
  return S.managerAllowed;
 }
 function ensureViews(){
@@ -39,8 +40,12 @@ async function ensureNav(){
  const nav=$('mainNav');if(!nav||menuBusy||!hasSchool())return;
  menuBusy=true;
  try{
-  const ok=await permitted();const wanted=ok?[
-   ['command-centre','⌘','School Command Centre'],['school-tasks','✓','Tasks & Deadlines'],['school-calendar','▦','School Calendar'],['email-automation','✉','Email Automation']
+  const ok=await permitted(), manager=profile()?.role==='manager';
+  const wanted=ok?[
+   ...(!manager||['manage_dashboard','view_academic_reports','manage_tasks'].some(k=>S.managerPerms.has(k))?[['command-centre','⌘','School Command Centre']]:[]),
+   ...(!manager||S.managerPerms.has('manage_tasks')?[['school-tasks','✓','Tasks & Deadlines']]:[]),
+   ...(!manager||S.managerPerms.has('manage_meetings')?[['school-calendar','▦','School Calendar']]:[]),
+   ...(!manager||S.managerPerms.has('manage_email_automation')?[['email-automation','✉','Email Automation']]:[])
   ]:[];
   const existing=new Map(Array.from(nav.querySelectorAll('[data-cc-nav="1"]')).map(n=>[n.dataset.view,n]));
   if(!wanted.length){existing.forEach(n=>n.remove());return;}
