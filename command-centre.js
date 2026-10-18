@@ -42,10 +42,17 @@ async function ensureNav(){
   const ok=await permitted();const wanted=ok?[
    ['command-centre','⌘','School Command Centre'],['school-tasks','✓','Tasks & Deadlines'],['school-calendar','▦','School Calendar'],['email-automation','✉','Email Automation']
   ]:[];
-  nav.querySelectorAll('[data-cc-nav="1"]').forEach(n=>n.remove());
+  const existing=new Map(Array.from(nav.querySelectorAll('[data-cc-nav="1"]')).map(n=>[n.dataset.view,n]));
+  if(!wanted.length){existing.forEach(n=>n.remove());return;}
+  if(wanted.every(([id])=>existing.has(id))&&existing.size===wanted.length)return;
+  existing.forEach((node,id)=>{if(!wanted.some(w=>w[0]===id))node.remove();});
   const anchor=nav.querySelector('[data-view="overview"]');
   let cursor=anchor;
-  for(const [id,icon,label] of wanted){const b=document.createElement('button');b.type='button';b.dataset.view=id;b.dataset.ccNav='1';b.innerHTML='<span class="ico">'+icon+'</span><span>'+label+'</span>';b.addEventListener('click',()=>A().openView?.(id));if(cursor?.parentElement===nav){cursor.after(b);cursor=b;}else nav.appendChild(b);}
+  for(const [id,icon,label] of wanted){
+   if(existing.has(id)){cursor=existing.get(id);continue;}
+   const b=document.createElement('button');b.type='button';b.dataset.view=id;b.dataset.ccNav='1';b.innerHTML='<span class="ico">'+icon+'</span><span>'+label+'</span>';b.addEventListener('click',()=>A().openView?.(id));
+   if(cursor?.parentElement===nav){cursor.after(b);cursor=b;}else nav.appendChild(b);
+  }
   ensureViews();
  }catch(e){console.warn('Command Centre navigation',e);}finally{menuBusy=false;}
 }
