@@ -209,7 +209,7 @@ This section records the latest concrete follow-up changes. The production-facin
 - [ ] Review multiple permissive-policy advisories. The current overlapping policies include intentional Creator-versus-school-role access paths; do not delete them without preserving equivalent checks and testing each role.
 - [ ] Review the two SECURITY DEFINER-function advisories. The currently inspected functions have explicit Creator checks and are used by the frontend; keep those checks and test authorization before changing their grants.
 - [ ] Review remaining unused-index notices after meaningful production-like data and query workload exist; do not delete indexes solely because a new, low-volume database has no scans.
-- [ ] Confirm the latest GitHub Pages run passes both the new Appearance Studio smoke test and the existing sound-engine smoke test.
+- [x] GitHub Actions run `39127205044` passed the deployed Appearance Studio smoke test (8 themes/8 distinct palettes, text size and reduced-motion settings) and sound-engine smoke test (40 mapped sounds, asset loading, mute and preference persistence).
 - [ ] Configure and test the email provider/sender before treating an in-app notice as an email.
 
 **Status after the 2026-10-18 review:** account-level themes and notice entry points are implemented; FK-index and duplicate-index alerts were resolved. The product is still not production-accepted until Auth configuration, migration-source parity and real multi-account/multi-school tests are complete.
