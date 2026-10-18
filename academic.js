@@ -606,17 +606,42 @@ async function loadAttendanceHistory(){
  box.innerHTML=r.error?notice('attHistoryErr',err(r.error),'error'):table(['Date','Class','Section','Status'],(r.data||[]).map(x=>'<tr><td>'+E(x.attendance_date)+'</td><td>'+E(state.classes.find(c=>c.id===x.class_id)?.name||'Class')+'</td><td>'+E(state.sections.find(s=>s.id===x.section_id)?.name||'Whole class')+'</td><td>'+E(x.status)+'</td></tr>'));
 }
 async function renderEvents(isNotice){
- const view=isNotice?'view-notices':'view-meetings',can=await permit(isNotice?'manage_notices':'manage_meetings'),title=isNotice?'School Notices':'Meetings & Calendar';
- let form=can?'<section class="acad-panel"><h3>Create '+title.toLowerCase()+'</h3><form id="eventForm" class="acad-form">'+field('eventTitle','Title','text',true)+(isNotice?'<div class="field"><label for="eventRole">Audience role</label><select id="eventRole"><option>student</option><option>teacher</option><option>principal</option><option>manager</option></select></div>':'<div class="field"><label for="eventType">Event type</label><select id="eventType"><option>meeting</option><option>exam</option><option>school</option><option>holiday</option><option>reminder</option></select></div>')+field('eventStart','Starts at','datetime-local',true)+field('eventEnd','Ends at','datetime-local',false)+ta('eventBody','Details','Description / agenda')+field('eventLocation','Location','text',false)+btn('saveEvent','Save record')+'<div id="eventStatus" style="display:none"></div></form></section>':'';
- $('view-'+(isNotice?'notices':'meetings')).innerHTML=shell('School workspace',title,'Saved data comes from the active school. Queued notifications are not labeled sent unless a provider confirms delivery.',form+'<section class="acad-panel"><div class="acad-toolbar"><h3>Saved records</h3>'+btn('refreshEvents','Refresh','alt')+'</div><div id="eventsRows"></div></section>');
- if(can)$('eventForm').onsubmit=e=>saveEvent(e,isNotice);$('refreshEvents').onclick=()=>loadEvents(isNotice);await loadEvents(isNotice);
+ const view=isNotice?'view-notices':'view-meetings',can=await permit(isNotice?'manage_notices':'manage_meetings'),title=isNotice?'School Notices':'Meetings';
+ const roles=[['student','Students'],['teacher','Teachers'],['principal','Principal'],['manager','Manager']];
+ const audience=can?'<section class="acad-panel"><h3>'+(isNotice?'Write a notice':'Schedule a meeting')+'</h3><p class="acad-muted">Choose who should receive it, write the details, then press Send. It will appear in the selected people’s NOOR AI dashboard.</p><form id="eventForm" class="acad-form">'+field('eventTitle',isNotice?'Notice title':'Meeting title','text',true)+'<div class="field"><label>Send to</label><div class="acad-audience" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:8px;margin-top:6px"><label class="acad-audience-option"><input type="checkbox" id="audience_all" checked> <b>Everyone at school</b></label>'+roles.map(([v,l])=>'<label class="acad-audience-option"><input type="checkbox" class="eventAudience" value="'+v+'"> '+l+'</label>').join('')+'</div><small class="acad-muted">“Everyone at school” includes students, teachers, principal and manager.</small></div>'+(isNotice?'':'<div class="field"><label for="eventType">Meeting type</label><select id="eventType"><option value="meeting">Staff / school meeting</option><option value="parent_meeting">Parent meeting</option><option value="academic">Academic meeting</option><option value="other">Other</option></select></div>')+field('eventStart',isNotice?'Publish from':'Meeting date & time','datetime-local',true)+(isNotice?'':'<div class="field"><label for="eventLocation">Location / meeting link</label><input id="eventLocation" maxlength="300" placeholder="Room, venue or online meeting link"></div>')+ta('eventBody',isNotice?'Notice details':'Agenda / details')+'<div class="row" style="justify-content:flex-end;gap:8px"><button class="btn" type="submit" id="sendEventBtn">'+(isNotice?'Send notice':'Send meeting invite')+' →</button></div><div id="eventStatus" style="display:none"></div></form></section>':'';
+ $('view-'+(isNotice?'notices':'meetings')).innerHTML=shell('School workspace',title,isNotice?'Write once, choose the audience, and send it to their dashboard.':'Choose the staff or school audience and send a meeting invitation to their dashboard.',audience+'<section class="acad-panel"><div class="acad-toolbar"><div><h3>Sent & saved</h3><p class="acad-muted">Items below are published in NOOR AI. Email delivery is separate.</p></div>'+btn('refreshEvents','Refresh','alt')+'</div><div id="eventsRows"></div></section>');
+ const start=$('eventStart');
+ if(start){const d=new Date(Date.now()+(isNotice?0:30*60000));d.setMinutes(d.getMinutes()-d.getTimezoneOffset());start.value=d.toISOString().slice(0,16);}
+ const all=$('audience_all');
+ if(all){all.addEventListener('change',()=>document.querySelectorAll('.eventAudience').forEach(x=>x.checked=false));document.querySelectorAll('.eventAudience').forEach(x=>x.addEventListener('change',()=>{if(x.checked)all.checked=false;if(![...document.querySelectorAll('.eventAudience')].some(y=>y.checked))all.checked=true;}));}
+ if(can)$('eventForm').onsubmit=e=>saveEvent(e,isNotice);
+ $('refreshEvents').onclick=()=>loadEvents(isNotice);await loadEvents(isNotice);
 }
 async function saveEvent(e,isNotice){
- e.preventDefault();try{const title=val('eventTitle'),body=val('eventBody');if(!title||!body)throw new Error('Enter title and details.');
- const start=new Date(val('eventStart')).toISOString(),end=val('eventEnd')?new Date(val('eventEnd')).toISOString():null;
- const q=isNotice?await db().from('school_notices').insert({school_id:sid(),created_by:u().id,title,body,target_roles:[val('eventRole')||'student'],starts_at:start,ends_at:end,is_active:true}):await db().from('calendar_events').insert({school_id:sid(),created_by:u().id,title,description:body,event_type:val('eventType')||'meeting',starts_at:start,ends_at:end,location:val('eventLocation')||null,target_roles:['principal','manager','teacher','student']});
- if(q.error)throw q.error;status('eventStatus','Record saved to database. Email delivery has not been claimed.','success');await loadEvents(isNotice);
+ e.preventDefault();
+ const send=$('sendEventBtn');if(send)send.disabled=true;
+ try{
+  const title=val('eventTitle'),body=val('eventBody');
+  if(!title||!body)throw new Error('Please enter a title and details.');
+  const all=$('audience_all')?.checked;
+  const selected=[...document.querySelectorAll('.eventAudience:checked')].map(x=>x.value);
+  const targetRoles=all?['student','teacher','principal','manager']:selected;
+  if(!targetRoles.length)throw new Error('Choose at least one recipient.');
+  const startValue=val('eventStart');
+  const start=startValue?new Date(startValue).toISOString():new Date().toISOString();
+  const end=val('eventEnd')?new Date(val('eventEnd')).toISOString():null;
+  const payload=isNotice
+   ?{school_id:sid(),created_by:u().id,title,body,target_roles:targetRoles,starts_at:start,ends_at:end,is_active:true}
+   :{school_id:sid(),created_by:u().id,title,description:body,event_type:val('eventType')||'meeting',starts_at:start,ends_at:end,location:val('eventLocation')||null,target_roles:targetRoles};
+  const q=await db().from(isNotice?'school_notices':'calendar_events').insert(payload);
+  if(q.error)throw q.error;
+  status('eventStatus',(isNotice?'Notice sent':'Meeting invite sent')+' to: '+(all?'Everyone at school':targetRoles.map(x=>({student:'Students',teacher:'Teachers',principal:'Principal',manager:'Manager'}[x])).join(', '))+'. It is now published in the selected recipients’ NOOR AI dashboard. Email is not sent automatically.','success');
+  $('eventForm').reset();
+  const st=$('eventStart');if(st){const d=new Date(Date.now()+(isNotice?0:30*60000));d.setMinutes(d.getMinutes()-d.getTimezoneOffset());st.value=d.toISOString().slice(0,16);}
+  if($('audience_all'))$('audience_all').checked=true;
+  await loadEvents(isNotice);
  }catch(e){status('eventStatus',err(e),'error');}
+ finally{if(send)send.disabled=false;}
 }
 async function loadEvents(isNotice){
  const box=$('eventsRows');if(!box)return;const name=isNotice?'school_notices':'calendar_events',cols=isNotice?'title,body,target_roles,starts_at,ends_at,is_active':'title,description,event_type,starts_at,ends_at,location';
