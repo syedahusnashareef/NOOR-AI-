@@ -69,7 +69,7 @@ html[data-noor-font="manrope"] body,html[data-noor-font="manrope"] button,html[d
 <script src="./sounds/sound-map.js?v=20261016"></script>
 <script src="./sounds/sound-manager.js?v=20261016"></script>
 <script src="./sounds/sound-settings.js?v=20261016"></script><script src="./theme-system.js?v=20261018"></script>
-<link rel="stylesheet" href="./teacher-reference.css?v=20261020-approved-v4">
+<link rel="stylesheet" href="./teacher-reference.css?v=20261020-approved-final-v6">
 </head>
 <body>
 <div id="authApp">
@@ -384,7 +384,7 @@ window.NOOR_AI_APP={get db(){return supabaseClient;},get profile(){return curren
 // Resume an existing Supabase session; direct route always checks the authenticated profile and database policies.
 (async()=>{if(!isConfigured){$('dbStateText').textContent='Backend setup required';$('dbState').classList.remove('ready');return;}try{const {data:{session}}=await supabaseClient.auth.getSession();if(session?.user)await enterWorkspace(session.user);else await loadSchools();}catch(e){console.warn('Session restore failed',e);}})();
 </script>
-<script src="./academic.js?v=20261019-noor-teacher-v3"></script>
+<script src="./academic.js?v=20261020-approved-final-v6"></script>
 <script src="./academic-extras.js"></script>
 <script src="./command-centre.js"></script>
 <script src="./principal-mock-data.js?v=20261019-v2"></script><script src="./principal-studio.js?v=20261019-v2"></script>
@@ -438,10 +438,10 @@ window.NOOR_AI_APP={get db(){return supabaseClient;},get profile(){return curren
 </script>
 
 <script src="./principal-staff-live.js"></script>
-<script src="./teacher-attendance.js?v=20261019-noor-teacher-v3"></script>
-<script src="./principal-teacher-approvals.js?v=20261019-noor-teacher-v3"></script>
-<script src="./teacher-reference-attendance.js?v=20261020-approved-v4"></script>
-<script src="./teacher-paper-generator.js?v=20261020-approved-v4"></script>
-<script src="./teacher-reference.js?v=20261020-approved-v4"></script>
+<script src="./teacher-attendance.js?v=20261020-approved-final-v6"></script>
+<script src="./principal-teacher-approvals.js?v=20261020-approved-final-v6"></script>
+<script src="./teacher-reference-attendance.js?v=20261020-approved-final-v6"></script>
+<script src="./teacher-paper-generator.js?v=20261020-approved-final-v6"></script>
+<script src="./teacher-reference.js?v=20261020-approved-final-v6"></script>
 </body>
 </html>
