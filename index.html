@@ -383,12 +383,12 @@ window.NOOR_AI_APP={get db(){return supabaseClient;},get profile(){return curren
 // Resume an existing Supabase session; direct route always checks the authenticated profile and database policies.
 (async()=>{if(!isConfigured){$('dbStateText').textContent='Backend setup required';$('dbState').classList.remove('ready');return;}try{const {data:{session}}=await supabaseClient.auth.getSession();if(session?.user)await enterWorkspace(session.user);else await loadSchools();}catch(e){console.warn('Session restore failed',e);}})();
 </script>
-<script src="./academic.js"></script>
+<script src="./academic.js?v=20261019-noor-teacher-v3"></script>
 <script src="./academic-extras.js"></script>
 <script src="./command-centre.js"></script>
 <script src="./principal-mock-data.js?v=20261019-v2"></script><script src="./principal-studio.js?v=20261019-v2"></script>
-<script src="./teacher-studio.js"></script>
-<script src="./teacher-studio-plus.js"></script>
+<script src="./teacher-studio.js?v=20261019-noor-teacher-v3"></script>
+<script src="./teacher-studio-plus.js?v=20261019-noor-teacher-v3"></script>
 
 
 <!-- Always-visible fallback: the sound buttons remain visible even if app scripts fail. -->
@@ -441,10 +441,10 @@ window.NOOR_AI_APP={get db(){return supabaseClient;},get profile(){return curren
 </script>
 
 <script src="./principal-staff-live.js"></script>
-<script src="./teacher-attendance.js"></script>
-<script src="./teacher-dashboard-v3.js"></script>
-<script src="./teacher-absence-watch.js"></script>
-<script src="./principal-teacher-approvals.js"></script>
-<script src="./teacher-profile-editor.js"></script>
+<script src="./teacher-attendance.js?v=20261019-noor-teacher-v3"></script>
+<script src="./teacher-dashboard-v3.js?v=20261019-noor-teacher-v3"></script>
+<script src="./teacher-absence-watch.js?v=20261019-noor-teacher-v3"></script>
+<script src="./principal-teacher-approvals.js?v=20261019-noor-teacher-v3"></script>
+<script src="./teacher-profile-editor.js?v=20261019-noor-teacher-v3"></script>
 </body>
 </html>
