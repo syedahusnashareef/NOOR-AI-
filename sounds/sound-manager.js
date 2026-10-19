@@ -39,7 +39,7 @@
   };
   const cleanPrefs = value => ({
     masterSound: value?.masterSound !== false,
-    volume: clampVolume([0.32,0.5].includes(Number(value?.volume)) ? 1 : (value?.volume ?? DEFAULTS.volume)),
+    volume: clampVolume(value?.volume ?? DEFAULTS.volume),
     voiceCheers: value?.voiceCheers !== false,
     haptics: value?.haptics !== false
   });
@@ -282,6 +282,12 @@
     const local = readLocal(userId);
     prefs = local?.prefs ? cleanPrefs(local.prefs) : { ...DEFAULTS };
     localUpdatedAt = local?.updatedAt || 0;
+    const volumeMigrationKey = "noor.sound-volume-v2." + (userId || "guest");
+    let migrateVolume = false;
+    try {
+      migrateVolume = localStorage.getItem(volumeMigrationKey) !== "1";
+      if (migrateVolume) localStorage.setItem(volumeMigrationKey, "1");
+    } catch (_) {}
     applyMaster(); /* Apply a remembered mute before any new interaction can play. */
     let lastDay = "";
     try { lastDay = localStorage.getItem(DAILY_PREFIX + (userId || "guest")) || ""; } catch (_) {}
@@ -314,6 +320,12 @@
           writeLocal();
         } else if (!remote) {
           /* First login: seed a personal database row with all sound and haptic options ON. */
+          scheduleSave();
+        }
+        if (migrateVolume) {
+          /* Previous releases capped output at 50%; migrate existing accounts once to the requested 100% default. */
+          prefs.volume = 1;
+          applyMaster();
           scheduleSave();
         }
         emit();
