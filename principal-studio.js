@@ -63,3 +63,33 @@ function start(){const api=A();if(!api.profile)return;route();const observer=new
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{mount();start()},{once:true});else{mount();start()}
 window.addEventListener('noor:workspace-ready',start);
 })();
+
+
+/* Management Notes — private, device-local drafts until school-scoped notes RLS is deployed. */
+(() => {
+ const app=()=>window.NOOR_AI_APP||{};
+ const escape=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const key=()=> 'noor.management.notes.draft.'+(app().user?.id||'unknown');
+ function render(){
+  const p=app().profile;if(!p||!['owner','principal','manager'].includes(p.role))return;
+  const host=document.getElementById('noor-principal');if(!host||document.getElementById('noor-management-notes'))return;
+  const section=document.createElement('section');section.id='noor-management-notes';
+  section.className='pd-card';section.style.cssText='margin-top:16px;padding:20px;border-radius:20px;background:var(--p-card,#fff);border:1px solid var(--p-line,#eee);color:var(--p-ink,#34232d)';
+  section.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><div><h3 style="margin:0">📝 Management Notes</h3><small>Private drafts on this device only · Not shared or synced</small></div><button type="button" class="pd-btn" id="mn-add">+ Add Note</button></div><div id="mn-editor" hidden style="margin-top:14px"><input id="mn-title" maxlength="100" placeholder="Note title" aria-label="Note title" style="width:100%;padding:10px;margin-bottom:8px"><textarea id="mn-body" maxlength="4000" rows="4" placeholder="Write your management note…" aria-label="Note content" style="width:100%;padding:10px"></textarea><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><select id="mn-priority" aria-label="Priority"><option>Normal</option><option>Important</option><option>Urgent</option></select><input type="date" id="mn-due" aria-label="Due date"><button type="button" class="pd-btn pd-primary" id="mn-save">Save Draft</button><button type="button" class="pd-btn" id="mn-cancel">Cancel</button></div></div><div id="mn-list" style="margin-top:12px"></div>';
+  host.appendChild(section);
+  const q=id=>section.querySelector('#'+id);let editId=null;
+  const read=()=>{try{const v=JSON.parse(localStorage.getItem(key())||'[]');return Array.isArray(v)?v:[]}catch{return []}};
+  const write=items=>{try{localStorage.setItem(key(),JSON.stringify(items));return true}catch{app().toast?.('Could not save note on this device.','error');return false}};
+  const reset=()=>{editId=null;q('mn-title').value='';q('mn-body').value='';q('mn-priority').value='Normal';q('mn-due').value='';q('mn-editor').hidden=true};
+  const draw=()=>{const items=read();q('mn-list').innerHTML=items.length?items.map(n=>'<article style="border-top:1px solid #e9dce2;padding:12px 0"><strong>'+escape(n.title)+'</strong> <small>· '+escape(n.priority)+' '+(n.due?'· Due '+escape(n.due):'')+'</small><p style="white-space:pre-wrap;overflow-wrap:anywhere">'+escape(n.body)+'</p><button type="button" class="pd-btn" data-edit="'+escape(n.id)+'">Edit</button> <button type="button" class="pd-btn" data-delete="'+escape(n.id)+'">Delete</button></article>').join(''):'<p class="pd-muted">No notes yet. Create a private management draft.</p>'};
+  q('mn-add').onclick=()=>{reset();q('mn-editor').hidden=false;q('mn-title').focus()};
+  q('mn-cancel').onclick=reset;
+  q('mn-save').onclick=()=>{const title=q('mn-title').value.trim(),body=q('mn-body').value.trim();if(!title||!body){app().toast?.('Enter a title and note.','error');return}const items=read();const n={id:editId||String(Date.now()),title,body,priority:q('mn-priority').value,due:q('mn-due').value};const index=items.findIndex(x=>x.id===editId);if(index>=0)items[index]=n;else items.unshift(n);if(write(items)){reset();draw()}};
+  q('mn-list').onclick=e=>{const b=e.target.closest('button');if(!b)return;const id=b.dataset.edit||b.dataset.delete;const items=read(),n=items.find(x=>x.id===id);if(!n)return;if(b.dataset.delete){if(confirm('Delete this draft note?')&&write(items.filter(x=>x.id!==id)))draw()}else{editId=id;q('mn-title').value=n.title;q('mn-body').value=n.body;q('mn-priority').value=n.priority;q('mn-due').value=n.due;q('mn-editor').hidden=false;q('mn-title').focus()}};
+  draw();
+ }
+ const observer=new MutationObserver(()=>{if(document.getElementById('noor-principal')&&!document.getElementById('noor-management-notes'))render()});
+ const boot=()=>{observer.observe(document.body,{childList:true,subtree:true});render()};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+ window.addEventListener('noor:workspace-ready',render);
+})();
