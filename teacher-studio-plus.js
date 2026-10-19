@@ -59,7 +59,7 @@ extra.innerHTML=`<div class="nts-grid">
 <label>Class + section<input name="class_label" maxlength="60" placeholder="8-B" required></label>
 <div><button type="submit">Request period</button></div></form>
 <p class="nts-status" id="ntsPeriodStatus" role="status"></p>
-<div>${(periods.data||[]).map(p=>'<div class="nts-row"><strong>'+esc(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][p.weekday])+' · '+esc(p.subject_name)+' · '+esc(p.class_label)+'</strong><small>'+esc(p.start_time?.slice(0,5))+'–'+esc(p.end_time?.slice(0,5))+' · '+esc(p.approval_status||'pending')+'</small></div>').join('')||'<p class="nts-muted">No timetable entries yet.</p>'}</div></div>
+<div>${(periods.data||[]).map(p=>'<div class="nts-row"><strong>'+esc(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][p.weekday])+' · '+esc(p.subject_name)+' · '+esc(p.class_label)+'</strong><small>'+esc(p.start_time?.slice(0,5))+'–'+esc(p.end_time?.slice(0,5))+' · '+esc(p.approval_status||'pending')+'</small>'+(p.approval_status==='pending'?'<button type="button" data-edit-period="'+esc(p.id)+'">Edit request</button>':'')+'</div>').join('')||'<p class="nts-muted">No timetable entries yet.</p>'}</div></div>
 <div class="nts-card"><h3>Personal task board</h3><form id="ntsTaskForm" class="nts-form"><label>Task<input name="title" required maxlength="150" placeholder="Prepare lesson notes"></label><label>Due date<input name="due_date" type="date"></label><label>Priority<select name="priority"><option>normal</option><option>high</option><option>low</option></select></label><div><button type="submit">Add task</button></div></form><p id="ntsTaskStatus" class="nts-status" role="status"></p>
 ${(tasks.data||[]).map(t=>'<div class="nts-row"><strong>'+esc(t.title)+'</strong><small>'+esc(t.status)+' · '+esc(t.due_date||'No due date')+'</small><button data-task="'+esc(t.id)+'" '+(t.status==='done'?'disabled':'')+'>Mark done</button></div>').join('')||'<p class="nts-muted">No personal tasks yet.</p>'}</div>`;
 root.append(extra);root.dataset.extended=key;
@@ -71,8 +71,14 @@ root.append(overlay);$('#ntsClose',overlay).onclick=()=>overlay.remove();overlay
 $('#ntsPeriodForm',extra).onsubmit=async e=>{
 e.preventDefault();const form=e.currentTarget,values=Object.fromEntries(new FormData(form));if(values.start_time>=values.end_time){$('#ntsPeriodStatus',extra).textContent='End time must be after start time';return;}
 const b=$('button[type=submit]',form);b.disabled=true;
-const {error}=await db.from('noor_teacher_periods').insert({...values,weekday:Number(values.weekday),period_number:Number(values.period_number),school_id:school,teacher_id:uid,status:'upcoming',approval_status:'pending'});
-$('#ntsPeriodStatus',extra).textContent=error?error.message:'Period submitted for approval';b.disabled=false;if(!error){root.dataset.extended='';extra.remove();boot();}
+const payload={...values,weekday:Number(values.weekday),period_number:Number(values.period_number)};
+const editing=form.dataset.editPeriod||'';
+const response=editing
+ ?await db.from('noor_teacher_periods').update(payload).eq('id',editing).eq('teacher_id',uid).eq('school_id',school).eq('approval_status','pending').select('id').maybeSingle()
+ :await db.from('noor_teacher_periods').insert({...payload,school_id:school,teacher_id:uid,status:'upcoming',approval_status:'pending'}).select('id').maybeSingle();
+const error=response.error||(!response.data?{message:'Request no longer pending or access denied.'}:null);
+$('#ntsPeriodStatus',extra).textContent=error?error.message:editing?'Pending request updated.':'Period submitted for approval.';
+b.disabled=false;if(!error){root.dataset.extended='';extra.remove();boot();}
 };
 $('#ntsTaskForm',extra).onsubmit=async e=>{
 e.preventDefault();const form=e.currentTarget,values=Object.fromEntries(new FormData(form));if(!values.due_date)delete values.due_date;
@@ -81,6 +87,14 @@ const {error}=await db.from('noor_teacher_tasks').insert({...values,school_id:sc
 $('#ntsTaskStatus',extra).textContent=error?error.message:'Task added';b.disabled=false;if(!error){root.dataset.extended='';extra.remove();boot();}
 };
 extra.addEventListener('click',async e=>{
+const edit=e.target.closest('[data-edit-period]');if(edit){
+ const row=(periods.data||[]).find(p=>p.id===edit.dataset.editPeriod);
+ if(!row)return;
+ const form=$('#ntsPeriodForm',extra);
+ ['weekday','period_number','start_time','end_time','subject_name','class_label','block_type'].forEach(k=>{if(form.elements[k])form.elements[k].value=String(row[k]??'').slice(0,(k==='start_time'||k==='end_time')?5:255)});
+ form.dataset.editPeriod=row.id;form.querySelector('button[type=submit]').textContent='Update pending request';
+ form.scrollIntoView({behavior:'smooth',block:'center'});return;
+}
 const b=e.target.closest('[data-task]');if(!b)return;b.disabled=true;
 const {error}=await db.from('noor_teacher_tasks').update({status:'done'}).eq('id',b.dataset.task).eq('teacher_id',uid).eq('school_id',school);
 if(error){api.toast(error.message,'error');b.disabled=false}else{root.dataset.extended='';extra.remove();boot();}
