@@ -1,7 +1,7 @@
 /* NOOR AI School Command Centre. Loaded into the existing authenticated NOOR AI workspace. */
 (() => {
 'use strict';
-const A=()=>window.NOOR_AI_APP||{}, db=()=>A().db, user=()=>A().user, profile=()=>A().profile, schoolId=()=>A().schoolId;
+const A=()=>window.NOOR_AI_APP||{}, db=()=>A().db, user=()=>A().user, profile=()=>A().profile, schoolId=()=>S.selectedSchoolId||A().schoolId;
 const $=id=>document.getElementById(id), E=v=>(A().escapeHtml||((x)=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))))(v??'');
 const msg=(s,t='info')=>A().toast?A().toast(s,t):alert(s);
 const today=()=>{const parts=new Intl.DateTimeFormat('en-CA',{timeZone:S.timezone||'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day;};
@@ -20,11 +20,14 @@ const WIDGETS=[
  ['student_count','Students & enrolments','Live authorised student profiles'],['staff_count','Teachers & staff','Active school staff records'],['attendance','Today’s attendance','Attendance sessions and marked records'],['class_attendance','Class attendance','Class and section attendance summary'],['academic','Academic performance','Recorded assessment results and exam schedule'],['syllabus','Syllabus progress','Existing syllabus units and progress records'],['reports','Teaching reports','Daily report submission status'],['approvals','Pending approvals','Pending student records and existing approval work'],['upcoming','Upcoming events & exams','Saved calendar and assessment records'],['tasks','Tasks & deadlines','Open, overdue and approaching school tasks'],['notices','Announcements','Active school notices'],['notifications','Notifications','School-scoped queued and failed notification records'],['parent_communication','Parent communications (not configured)','No linked-parent inbox or unresolved-query table is currently available'],['email','Email status','Provider-backed email log status'],['intelligence','School intelligence','Facts and recommendations grounded in records'],['fees_planned','Fee management (planned)','Not active; no collection or dues metrics']
 ];
 const DEFAULT={widgets:['student_count','staff_count','attendance','class_attendance','tasks','upcoming','reports','syllabus','notices','notifications','intelligence'],hidden:[],sizes:{},dateRange:'7d'};
-const S={prefs:structuredClone(DEFAULT),catalog:[],staff:[],tasks:[],assignees:[],events:[],notices:[],reports:[],lessonPlans:[],units:[],progress:[],assessments:[],results:[],notifications:[],logs:[],templates:[],rules:[],classes:[],sections:[],subjects:[],calendarMode:'week',calendarDate:new Date(),editTask:null,editEvent:null,editRule:null,managerAllowed:false,managerPerms:new Set(),timezone:'Asia/Kolkata'};
+const S={selectedSchoolId:null,schoolChoices:[],schoolChoicesLoaded:false,prefs:structuredClone(DEFAULT),catalog:[],staff:[],tasks:[],assignees:[],events:[],notices:[],reports:[],lessonPlans:[],units:[],progress:[],assessments:[],results:[],notifications:[],logs:[],templates:[],rules:[],classes:[],sections:[],subjects:[],calendarMode:'week',calendarDate:new Date(),editTask:null,editEvent:null,editRule:null,managerAllowed:false,managerPerms:new Set(),timezone:'Asia/Kolkata'};
 const hasSchool=()=>Boolean(db()&&user()&&profile()&&schoolId());
+const hasAuthContext=()=>Boolean(db()&&user()&&profile());
 async function permitted(){
+ if(!hasAuthContext())return false;
+ if(profile().role==='creator')return true;
  if(!hasSchool())return false;
- if(ROLE_ALLOWED.includes(profile().role)||profile().role==='creator'||profile().role==='teacher')return true;
+ if(ROLE_ALLOWED.includes(profile().role)||profile().role==='teacher')return true;
  if(profile().role!=='manager')return false;
  const r=await db().from('role_permissions').select('permission_key,is_allowed').eq('school_id',schoolId()).eq('role','manager').in('permission_key',['manage_dashboard','manage_tasks','manage_meetings','manage_email_automation','view_academic_reports','view_students','view_attendance','view_teacher_activity','review_reports','manage_syllabus','manage_notices','manage_staff']);
  S.managerPerms=new Set(r.error?[]:(r.data||[]).filter(x=>x.is_allowed).map(x=>x.permission_key));
@@ -37,9 +40,15 @@ function ensureViews(){
 }
 let menuBusy=false;
 async function ensureNav(){
- const nav=$('mainNav');if(!nav||menuBusy||!hasSchool())return;
+ const nav=$('mainNav');if(!nav||menuBusy||!hasAuthContext())return;
  menuBusy=true;
  try{
+  if(profile()?.role==='creator'){
+   if(!S.schoolChoicesLoaded){const q=await db().from('schools').select('id,name').order('name').limit(500);if(q.error)throw q.error;S.schoolChoices=q.data||[];S.schoolChoicesLoaded=true;}
+   let picker=$('cc-creator-school-picker');
+   if(!picker){picker=document.createElement('div');picker.id='cc-creator-school-picker';picker.style.cssText='padding:8px 9px;margin:0 0 8px;border:1px solid #ffffff28;border-radius:10px;color:#f5e7ed;font-size:10px;';picker.innerHTML='<label for="cc-creator-school" style="display:block;margin-bottom:6px;font-weight:800">ACTIVE SCHOOL WORKSPACE</label><select id="cc-creator-school" style="width:100%;padding:9px;border-radius:8px;border:1px solid #ffffff40;background:#fff;color:#321323;font:inherit"><option value="">Choose a school…</option></select>';nav.prepend(picker);}
+   const select=$('cc-creator-school');if(select){const current=schoolId()||'';select.innerHTML='<option value="">Choose a school…</option>'+S.schoolChoices.map(x=>'<option value="'+E(x.id)+'">'+E(x.name)+'</option>').join('');select.value=current;select.onchange=()=>{S.selectedSchoolId=select.value||null;S.prefs=structuredClone(DEFAULT);S.tasks=[];S.events=[];S.notices=[];ensureNav();const active=document.querySelector('.view.active');if(active?.id?.startsWith('view-')){const routeId=active.id.slice(5);if(ROUTES.includes(routeId)&&schoolId())route(routeId);}};}
+  }
   const ok=await permitted(), manager=profile()?.role==='manager', teacher=profile()?.role==='teacher';
   const wanted=ok?[
    ...(!teacher&&(!manager||['manage_dashboard','view_academic_reports','manage_tasks'].some(k=>S.managerPerms.has(k)))?[['command-centre','⌘','School Command Centre']]:[]),
@@ -377,7 +386,7 @@ async function generateInsights(){
 async function route(id){
  if(!ROUTES.includes(id))return false;
  if(!(await permitted())){msg('This section is only available to authenticated, authorised school leadership.','error');return true;}
- if(!hasSchool()){msg('Choose the active school workspace first.','error');return true;}
+ if(!hasSchool()){msg('Choose an active school from the Platform Creator workspace selector first.','error');return true;}
  if(profile()?.role==='teacher'&&!['school-tasks','school-calendar'].includes(id)){msg('Teachers can open only their assigned task list and school calendar.','error');return true;}
  if(profile()?.role==='manager'){
   const required={'school-tasks':'manage_tasks','school-calendar':'manage_meetings','email-automation':'manage_email_automation'};
