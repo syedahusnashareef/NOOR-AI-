@@ -32,11 +32,30 @@ jobs:
       - name: Assemble only the public website files
         run: |
           mkdir -p _site/sounds
-          cp index.html academic.js academic.css academic-extras.js config.js command-centre.js command-centre.css theme-system.js theme-system.css principal-studio.js principal-mock-data.js principal-staff-live.js teacher-studio.js teacher-studio-plus.js _site/
+          # Publish every module actually referenced by the current index.html.
+          # Previously omitted modules caused the live site to keep showing the old Teacher UI.
+          cp index.html academic.js academic.css academic-extras.js config.js \
+            command-centre.js command-centre.css theme-system.js theme-system.css \
+            principal-studio.js principal-mock-data.js principal-staff-live.js \
+            teacher-attendance.js teacher-reference.js teacher-reference.css \
+            teacher-reference-attendance.js teacher-paper-generator.js \
+            principal-teacher-approvals.js _site/
           cp -R sounds/. _site/sounds/
           mkdir -p _site/preview
           cp preview/principal-dashboard-preview.html _site/preview/
           touch _site/.nojekyll
+          # Fail deployment BEFORE publishing if a local src/href asset is missing.
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html = Path("_site/index.html").read_text(encoding="utf-8")
+          files = sorted({m.group(1).split("?", 1)[0].split("#", 1)[0].removeprefix("./")
+              for m in re.finditer(r'(?:src|href)=["\'](\./[^"\']+)["\']', html)})
+          missing = [f for f in files if not (Path("_site") / f).is_file()]
+          print("GitHub Pages local assets verified:", len(files))
+          if missing:
+              raise SystemExit("Missing required public files: " + ", ".join(missing))
+          PY
 
       - name: Upload website artifact
         uses: actions/upload-pages-artifact@v4
