@@ -29,7 +29,7 @@ const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+
 let currentKey='',busy=false;
 async function mount(){
  const app=window.NOOR_AI_APP,root=document.getElementById('view-overview');
- if(!app?.user||app.profile?.role!=='teacher'||!app.schoolId||!root)return;
+ if(!app?.user||app.profile?.role!=='teacher'||app.profile?.status!=='active'||!app.schoolId||!root)return;
  const key=app.user.id+':'+app.schoolId;
  if(busy||root.querySelector('.noor-teacher-studio')?.dataset.key===key)return;
  busy=true;
