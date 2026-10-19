@@ -39,7 +39,7 @@
   };
   const cleanPrefs = value => ({
     masterSound: value?.masterSound !== false,
-    volume: clampVolume(value?.volume === 0.32 ? 1 : (value?.volume ?? DEFAULTS.volume)),
+    volume: clampVolume([0.32,0.5].includes(Number(value?.volume)) ? 1 : (value?.volume ?? DEFAULTS.volume)),
     voiceCheers: value?.voiceCheers !== false,
     haptics: value?.haptics !== false
   });
