@@ -25,7 +25,7 @@ const css=`
 let style=document.createElement('style');style.textContent=css;document.head.append(style);
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const time=t=>t?String(t).slice(0,5):'—';
-const today=()=>new Date().toLocaleDateString('en-CA');
+const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 let currentKey='',busy=false;
 async function mount(){
  const app=window.NOOR_AI_APP,root=document.getElementById('view-overview');
