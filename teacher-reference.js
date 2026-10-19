@@ -47,7 +47,7 @@ async function render(){
  const version=++renderId;
  const workspace=document.getElementById('workspace');
  if(workspace?.classList.contains('hidden'))return;
- rendering=true;workspace.classList.add('noor-teacher-activated');
+ rendering=true;workspace.classList.add('noor-teacher-activated');workspace.classList.toggle('noor-teacher-handset',Boolean((navigator.maxTouchPoints>0||'ontouchstart' in window)&&Math.min(screen.width,screen.height)<=650));
  wrapper.innerHTML='<div class="noor-t4"><div class="nt-head"><div><span class="nt-kicker">NOOR · Teacher Portal</span><h1>Teacher Dashboard</h1></div></div><div class="nt-card"><p class="nt-muted">Loading your school data securely…</p></div></div>';
  try{
  const school=app.schoolId,uid=app.user.id,db=app.db,weekday=new Date().getDay();
@@ -254,7 +254,7 @@ function setLive(){
 window.NOOR_TEACHER_REFERENCE={render,renderCalendar,openPaper,openCalendar};
 const watcher=new MutationObserver(()=>{
  const w=document.getElementById('workspace');
- if(!w||w.classList.contains('hidden')||!isTeacher()){w?.classList.remove('noor-teacher-activated');if(channel&&get().db){get().db.removeChannel(channel);channel=null;}return;}
+ if(!w||w.classList.contains('hidden')||!isTeacher()){w?.classList.remove('noor-teacher-activated','noor-teacher-handset');if(channel&&get().db){get().db.removeChannel(channel);channel=null;}return;}
  if(root()?.classList.contains('active')&&!root()?.querySelector('.noor-t4')&&!rendering)render();
  const c=document.getElementById('view-teacher-calendar');
  if(c?.classList.contains('active')&&!c.querySelector('.noor-t4'))renderCalendar();
