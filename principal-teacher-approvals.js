@@ -19,16 +19,20 @@ async function load(){
  if(!root||!root.classList.contains('active')||!root.querySelector('#noor-principal')||!['owner','principal'].includes(app?.profile?.role)||!app.schoolId||pending)return;
  if(root.querySelector('#ntPrincipalApprovals'))return;
  pending=true;loadedAt=Date.now();
- const box=document.createElement('section');box.id='ntPrincipalApprovals';box.innerHTML='<h2>Teacher timetable requests</h2><p class="nt-pa-sub">Review new periods and timing changes before they become the official teacher schedule.</p><div id="ntPaList">Loading requests…</div>';
+ const box=document.createElement('section');box.id='ntPrincipalApprovals';box.innerHTML='<h2>Teacher timetable requests</h2><p class="nt-pa-sub">Review new periods and timing changes before they become the official teacher schedule.</p><div id="ntPaList">Loading requests…</div><h2 style="margin-top:16px">Today’s teaching activity</h2><div id="ntPaDaily" class="nt-pa-sub">Loading approved class progress…</div>';
  root.append(box);
  try{
  const db=app.db,school=app.schoolId;
- const [periods,staff]=await Promise.all([
+ const [periods,staff,runs,checkins]=await Promise.all([
  db.from('noor_teacher_periods').select('id,teacher_id,weekday,period_number,subject_name,class_label,start_time,end_time,block_type').eq('school_id',school).eq('approval_status','pending').order('weekday').order('start_time').limit(100),
- db.from('profiles').select('id,full_name').eq('school_id',school).eq('role','teacher').eq('status','active').limit(300)
+ db.from('profiles').select('id,full_name').eq('school_id',school).eq('role','teacher').eq('status','active').limit(300),
+ db.from('noor_teacher_period_runs').select('teacher_id,status').eq('school_id',school).eq('class_date',new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0')).limit(1000),
+ db.from('noor_staff_attendance').select('teacher_id,status').eq('school_id',school).eq('attendance_date',new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0')).limit(1000)
  ]);
- if(periods.error||staff.error)throw periods.error||staff.error;
+ if(periods.error||staff.error||runs.error||checkins.error)throw periods.error||staff.error||runs.error||checkins.error;
  const names=new Map((staff.data||[]).map(x=>[x.id,x.full_name]));
+ const countDone=(runs.data||[]).filter(x=>x.status==='done').length,countOngoing=(runs.data||[]).filter(x=>x.status==='ongoing').length,checkedIn=(checkins.data||[]).filter(x=>x.status==='present').length;
+ box.querySelector('#ntPaDaily').innerHTML='<p><b>Staff checked in:</b> '+checkedIn+' / '+(staff.data||[]).length+' &nbsp; <b>Classes ongoing:</b> '+countOngoing+' &nbsp; <b>Classes finished today:</b> '+countDone+'</p>'+((runs.data||[]).map(x=>'<div class="nt-pa-row"><b>'+esc(names.get(x.teacher_id)||'Teacher')+'</b><span>'+esc(x.status)+'</span></div>').join('')||'<p>No classes started today yet.</p>');
  const list=box.querySelector('#ntPaList');
  list.innerHTML=(periods.data||[]).length?(periods.data||[]).map(p=>'<div class="nt-pa-row" data-period="'+esc(p.id)+'"><div><b>'+esc(names.get(p.teacher_id)||'Assigned teacher')+'</b><small>'+esc(days[p.weekday]||'Day')+' · P'+esc(p.period_number)+' · '+esc(p.subject_name)+' · '+esc(p.class_label)+'</small><small>'+esc(String(p.start_time).slice(0,5))+'–'+esc(String(p.end_time).slice(0,5))+' · '+esc(p.block_type||'class')+'</small></div><div><button type="button" class="nt-pa-approve" data-decision="approved">✓ Approve</button> <button type="button" data-decision="rejected">Decline</button></div></div>').join(''):'<p class="nt-pa-sub">No pending timetable requests.</p>';
  list.addEventListener('click',async e=>{
