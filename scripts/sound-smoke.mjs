@@ -30,8 +30,15 @@ try {
   }
   await page.waitForFunction(() => !!window.NOOR_SOUND?.playSound, { timeout: 20000 });
 
-  // The first genuine user gesture unlocks browser audio.
-  await page.locator("#noorSoundQuickTest").click();
+  // Exercise the current compact Sound ON/OFF control; the old test-only button was removed from the live UI.
+  const quickToggle = page.locator("#noorSoundQuickToggle");
+  await quickToggle.waitFor({ state: "visible", timeout: 10000 });
+  await quickToggle.click();
+  await page.waitForFunction(() => window.NOOR_SOUND?.getPreferences?.().masterSound === false, { timeout: 10000 });
+  if ((await quickToggle.textContent()).trim() !== "Sound OFF") throw new Error("Quick sound control did not show Sound OFF");
+  await quickToggle.click();
+  await page.waitForFunction(() => window.NOOR_SOUND?.getPreferences?.().masterSound === true, { timeout: 10000 });
+  if ((await quickToggle.textContent()).trim() !== "Sound ON") throw new Error("Quick sound control did not restore Sound ON");
   await page.waitForFunction(() => {
     const statuses = window.NOOR_SOUND?.getAssetStatuses?.();
     return statuses && Object.keys(statuses).length > 0 &&
