@@ -2,7 +2,7 @@
 window.NOOR_SOUND_MAP = {
   eventToAsset: {
     "whoosh":"open_002", "click":"click_001", "pop":"click_002",
-    "tick":"tick_001", "slide":"scroll_001", "ding":"confirmation_001",
+    "tick":"tick_001", "slide":"select_001", "ding":"confirmation_001",
     "soft-buzz":"error_001", "level-up":"glass_002", "bell":"bong_001",
     "typing-blip":"select_001",
     "sparkle":"glass_001", "coin-collect":"confirmation_002",
