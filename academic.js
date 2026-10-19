@@ -708,7 +708,7 @@ function renderView(id){
  'teaching':()=>renderTeaching(),'weekly-plan':()=>renderWeekly(),'daily-report':()=>renderDaily(),
  'academic-monitoring':()=>renderMonitoring(),'notes':()=>renderStudentNotes(),
  'student-directory':()=>renderContextThen('student'),'teacher-directory':()=>renderContextThen('teacher'),
- 'staff-management':()=>renderStaff(),'attendance':()=>renderAttendance(),'schedules':()=>renderSchedules(),
+ 'staff-management':()=>renderStaff(),'attendance':()=>role()==='teacher'&&window.NOOR_TEACHER_ATTENDANCE?.open?window.NOOR_TEACHER_ATTENDANCE.open():renderAttendance(),'schedules':()=>renderSchedules(),
  'meetings':()=>renderEvents(false),'notices':()=>renderEvents(true),'audit-logs':()=>renderAudit(),'management':()=>renderManagement()
  };
  if(!funcs[id])return false;const allowed=({'teaching':['teacher'],'weekly-plan':['teacher'],'daily-report':['teacher'],'notes':['student'],'academic-monitoring':['creator','owner','principal','manager'],'student-directory':['creator','owner','principal','manager'],'teacher-directory':['creator','owner','principal','manager'],'staff-management':['creator','owner','principal','manager'],'attendance':['teacher','creator','owner','principal','manager'],'schedules':['teacher','creator','owner','principal','manager'],'meetings':['student','teacher','creator','owner','principal','manager'],'notices':['student','teacher','creator','owner','principal','manager'],'audit-logs':['creator','owner','principal','manager'],'management':['creator','owner','principal','manager']})[id]||[];
