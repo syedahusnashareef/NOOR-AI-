@@ -77,6 +77,11 @@ jobs:
           SITE_URL: ${{ steps.deployment.outputs.page_url }}
         run: node scripts/app-shell-smoke.mjs
 
+      - name: Verify desktop and mobile Teacher Dashboard with isolated mock school data
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: node scripts/teacher-dashboard-smoke.mjs
+
       - name: Verify account appearance themes
         env:
           SITE_URL: ${{ steps.deployment.outputs.page_url }}
