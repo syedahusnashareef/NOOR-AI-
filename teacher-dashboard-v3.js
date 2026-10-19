@@ -88,7 +88,7 @@ async function render(){
  db.from('task_assignees').select('task_id,status').eq('school_id',school).eq('assignee_id',id).limit(15),
  db.from('noor_teacher_tasks').select('title,status,due_date').eq('school_id',school).eq('teacher_id',id).order('due_date').limit(5),
  db.from('school_notices').select('title,created_at,target_roles').eq('school_id',school).eq('is_active',true).order('created_at',{ascending:false}).limit(4),
- db.from('noor_teacher_period_runs').select('period_id,status').eq('school_id',school).eq('teacher_id',id).eq('class_date',new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0'))
+ db.from('noor_teacher_period_runs').select('id,period_id,status').eq('school_id',school).eq('teacher_id',id).eq('class_date',new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0'))
  ]);
  let schoolTasks=[];
  if(assigned.data?.length){const lookup=await db.from('school_tasks').select('id,title,status,due_at,priority').eq('school_id',school).in('id',[...new Set(assigned.data.map(x=>x.task_id))]).limit(15);schoolTasks=lookup.data||[];}
