@@ -42,8 +42,9 @@ function activityHtml(items){
  return items.map(x=>'<div class="nt-activity-row"><span class="nt-round" style="height:35px;width:35px;font-size:15px">'+esc(x.icon)+'</span><div><strong>'+esc(x.title)+'</strong><small>'+esc(x.sub)+'</small></div><span class="nt-time">'+esc(dateTime(x.timestamp))+'</span></div>').join('');
 }
 async function render(){
- const app=get(),wrapper=root(),version=++renderId;
+ const app=get(),wrapper=root();
  if(!isTeacher()||!wrapper||rendering)return;
+ const version=++renderId;
  const workspace=document.getElementById('workspace');
  if(workspace?.classList.contains('hidden'))return;
  rendering=true;workspace.classList.add('noor-teacher-activated');
@@ -243,7 +244,7 @@ async function renderCalendar(){
 function setLive(){
  const a=get(),identity=a.user?.id+':'+a.schoolId;
  if(channel&&sessionKey!==identity){a.db.removeChannel(channel);channel=null}
- if(channel)return;
+ if(channel){const msg=$('#ntLiveStatus');if(msg&&live)msg.textContent='Live sync connected — Principal can view saved class progress.';return;}
  sessionKey=identity;live=false;
  channel=a.db.channel('noor-teacher-ui-'+identity).on('postgres_changes',{event:'*',schema:'public',table:'noor_teacher_period_runs',filter:'teacher_id=eq.'+a.user.id},()=>{if(root()?.querySelector('.noor-t4'))render()})
  .on('postgres_changes',{event:'*',schema:'public',table:'noor_teacher_periods',filter:'teacher_id=eq.'+a.user.id},()=>{if(root()?.querySelector('.noor-t4'))render()})
