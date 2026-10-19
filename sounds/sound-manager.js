@@ -2,10 +2,10 @@
 (() => {
   "use strict";
   const MAP = () => window.NOOR_SOUND_MAP || { eventToAsset: {}, categories: [], cheerEvents: [] };
-  const DEFAULTS = Object.freeze({ masterSound: true, volume: 0.32, voiceCheers: true, haptics: true });
+  const DEFAULTS = Object.freeze({ masterSound: true, volume: 1, voiceCheers: true, haptics: true });
   const LOCAL_PREFIX = "noor.sound-feel.v1.";
   const DAILY_PREFIX = "noor.sound-daily.v1.";
-  const MAX_VOLUME = 0.5;
+  const MAX_VOLUME = 1;
   const DEBOUNCE_MS = 80;
   const REDUCED_MOTION = !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   const assets = window.NOOR_SOUND_ASSETS || {};
@@ -39,7 +39,7 @@
   };
   const cleanPrefs = value => ({
     masterSound: value?.masterSound !== false,
-    volume: clampVolume(value?.volume ?? DEFAULTS.volume),
+    volume: clampVolume(value?.volume === 0.32 ? 1 : (value?.volume ?? DEFAULTS.volume)),
     voiceCheers: value?.voiceCheers !== false,
     haptics: value?.haptics !== false
   });
