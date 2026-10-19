@@ -35,17 +35,18 @@ async function mount(){
  busy=true;
  try{
   const db=app.db,school=app.schoolId,user=app.user.id;
-  const [att,periods,tasks]=await Promise.all([
+  const [att,periods,tasks,runs]=await Promise.all([
    db.from('noor_staff_attendance').select('id,status,checked_in_at').eq('school_id',school).eq('teacher_id',user).eq('attendance_date',today()).maybeSingle(),
    db.from('noor_teacher_periods').select('id,weekday,period_number,start_time,end_time,subject_name,class_label,status,approval_status').eq('school_id',school).eq('teacher_id',user).eq('weekday',new Date().getDay()).order('start_time'),
-   db.from('noor_teacher_tasks').select('id,title,status,due_date,priority').eq('school_id',school).eq('teacher_id',user).order('due_date',{ascending:true}).limit(8)
+   db.from('noor_teacher_tasks').select('id,title,status,due_date,priority').eq('school_id',school).eq('teacher_id',user).order('due_date',{ascending:true}).limit(8),
+   db.from('noor_teacher_period_runs').select('id,period_id,status,started_at,finished_at').eq('school_id',school).eq('teacher_id',user).eq('class_date',today())
   ]);
-  const errors=[att.error,periods.error,tasks.error].filter(Boolean);
+  const errors=[att.error,periods.error,tasks.error,runs.error].filter(Boolean);
   const present=att.data?.status==='present';
   const now=new Date().toTimeString().slice(0,5);
   const periodHtml=(periods.data||[]).map(p=>{
-   const approved=p.approval_status==='approved';const state=!approved?'upcoming':p.status==='done'?'done':time(p.start_time)<=now&&now<time(p.end_time)?'current':'upcoming';
-   return `<div class="nts-period ${state}"><span class="nts-chip">P${Number(p.period_number)||'?'}</span><div><strong>${escape(p.subject_name)} · ${escape(p.class_label)}</strong><small>${escape(time(p.start_time))}–${escape(time(p.end_time))} · ${approved?state:'Awaiting Principal approval'}</small><div class="nts-actions"><button data-period="${escape(p.id)}" data-action="start" ${!approved||state==='done'?'disabled':''}>Start class</button><button data-period="${escape(p.id)}" data-action="done" ${!approved||state==='done'?'disabled':''}>Finish class</button></div></div></div>`;
+   const approved=p.approval_status==='approved',run=(runs.data||[]).find(x=>x.period_id===p.id);const state=!approved?'upcoming':run?.status==='done'?'done':run?.status==='ongoing'?'current':'upcoming';
+   return `<div class="nts-period ${state}"><span class="nts-chip">P${Number(p.period_number)||'?'}</span><div><strong>${escape(p.subject_name)} · ${escape(p.class_label)}</strong><small>${escape(time(p.start_time))}–${escape(time(p.end_time))} · ${approved?state:'Awaiting Principal approval'}</small><div class="nts-actions"><button data-period="${escape(p.id)}" data-action="start" ${!approved||!!run?'disabled':''}>Start class</button><button data-period="${escape(p.id)}" data-action="done" ${!approved||run?.status!=='ongoing'?'disabled':''}>Finish class</button></div></div></div>`;
   }).join('');
   const box=document.createElement('section');box.className='noor-teacher-studio';box.dataset.key=key;
   box.innerHTML=`<div class="nts-hero"><small>NOOR · TEACHER WORKSPACE</small><h2>Hello, ${escape(app.profile.full_name||'Teacher')}</h2><span>Today's timetable, attendance and priorities</span></div>
@@ -66,9 +67,13 @@ async function mount(){
    }
    if(b.dataset.period){
     b.disabled=true;
-    const status=b.dataset.action==='done'?'done':'ongoing';
-    const {error}=await db.from('noor_teacher_periods').update({status}).eq('id',b.dataset.period).eq('school_id',school).eq('teacher_id',user);
-    if(error){app.toast(error.message,'error');b.disabled=false;}else{app.toast('Period updated','success');box.remove();mount();}
+    const status=b.dataset.action==='done'?'done':'ongoing',existing=(runs.data||[]).find(x=>x.period_id===b.dataset.period);
+    if(status==='done'&&existing?.status!=='ongoing'){app.toast('Start class before finishing.','error');b.disabled=false;return;}
+    const now=new Date().toISOString();
+    const response=existing
+      ?await db.from('noor_teacher_period_runs').update({status,finished_at:status==='done'?now:null}).eq('id',existing.id).eq('school_id',school).eq('teacher_id',user)
+      :await db.from('noor_teacher_period_runs').insert({school_id:school,teacher_id:user,period_id:b.dataset.period,class_date:today(),status:'ongoing',started_at:now});
+    if(response.error){app.toast(response.error.message,'error');b.disabled=false;}else{app.toast(status==='done'?'Class finished for today.':'Class started for today.','success');box.remove();mount();}
    }
   });
  }finally{busy=false;}
