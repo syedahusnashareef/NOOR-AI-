@@ -51,7 +51,7 @@ async function render(){
  wrapper.innerHTML='<div class="noor-t4"><div class="nt-head"><div><span class="nt-kicker">NOOR · Teacher Portal</span><h1>Teacher Dashboard</h1></div></div><div class="nt-card"><p class="nt-muted">Loading your school data securely…</p></div></div>';
  try{
  const school=app.schoolId,uid=app.user.id,db=app.db,weekday=new Date().getDay();
- const [extra,periods,runs,checkin,assignees,personal,notices,calendar,assignment]=await Promise.all([
+ const [extra,periods,runs,checkin,assignees,personal,notices,calendar,assignment,membership]=await Promise.all([
  db.from('noor_teacher_profile_details').select('*').eq('school_id',school).eq('teacher_id',uid).maybeSingle(),
  db.from('noor_teacher_periods').select('id,period_number,weekday,start_time,end_time,subject_name,class_label,approval_status,block_type').eq('school_id',school).eq('teacher_id',uid).order('weekday').order('start_time').limit(100),
  db.from('noor_teacher_period_runs').select('id,period_id,status,started_at,finished_at').eq('school_id',school).eq('teacher_id',uid).eq('class_date',today()),
@@ -60,7 +60,8 @@ async function render(){
  db.from('noor_teacher_tasks').select('id,title,status,due_date').eq('school_id',school).eq('teacher_id',uid).order('due_date').limit(12),
  db.from('school_notices').select('id,title,created_at,body,target_roles').eq('school_id',school).eq('is_active',true).order('created_at',{ascending:false}).limit(15),
  db.from('calendar_events').select('id,title,starts_at,teacher_id,target_roles,event_type').eq('school_id',school).gte('starts_at',new Date().toISOString()).order('starts_at').limit(15),
- db.from('teacher_assignments').select('class_id,section_id,subject_id').eq('school_id',school).eq('teacher_id',uid).eq('is_active',true)
+ db.from('teacher_assignments').select('class_id,section_id,subject_id').eq('school_id',school).eq('teacher_id',uid).eq('is_active',true),
+ db.from('school_memberships').select('employee_id,joined_at').eq('school_id',school).eq('user_id',uid).eq('status','active').maybeSingle()
  ]);
  if(version!==renderId)return;
  if([extra.error,periods.error,runs.error,checkin.error,assignees.error,personal.error,notices.error,calendar.error,assignment.error].some(Boolean)){
@@ -75,7 +76,7 @@ async function render(){
  if(version!==renderId)return;
  let avatar=app.profile.avatar_url||'';
  if(!avatar&&app.profile.avatar_path){const r=await db.storage.from('student-photos').createSignedUrl(app.profile.avatar_path,900);avatar=r.data?.signedUrl||''}
- const details=extra.data||{},allPeriods=periods.data||[],allRuns=runs.data||[],approved=allPeriods.filter(x=>x.weekday===weekday&&x.approval_status==='approved'),runByPeriod=new Map(allRuns.map(x=>[x.period_id,x])),complete=approved.filter(x=>runByPeriod.get(x.id)?.status==='done').length;
+ const details={...(extra.data||{}),employee_code:extra.data?.employee_code||membership.data?.employee_id||'',joined_on:extra.data?.joined_on||membership.data?.joined_at?.slice(0,10)||''},allPeriods=periods.data||[],allRuns=runs.data||[],approved=allPeriods.filter(x=>x.weekday===weekday&&x.approval_status==='approved'),runByPeriod=new Map(allRuns.map(x=>[x.period_id,x])),complete=approved.filter(x=>runByPeriod.get(x.id)?.status==='done').length;
  const validNotices=(notices.data||[]).filter(x=>!x.target_roles?.length||x.target_roles.includes('teacher')||x.target_roles.includes('all'));
  const events=(calendar.data||[]).filter(x=>!x.teacher_id||x.teacher_id===uid).filter(x=>!x.target_roles?.length||x.target_roles.includes('teacher')||x.target_roles.includes('all'));
  const now=new Date().toTimeString().slice(0,5);
@@ -111,7 +112,7 @@ async function render(){
  '<section class="nt-card nt-attendance"><div class="nt-card-head"><div><span class="nt-icon">♟</span><h2>Student Attendance</h2></div><button class="nt-btn" data-link="attendance">View Full Attendance →</button></div><div id="ntAttendanceEmbed"><p class="nt-muted">Loading assigned students and attendance…</p></div></section>'+
  '<section class="nt-card"><div class="nt-card-head"><div><span class="nt-icon">◷</span><h2>Recent Activity</h2></div><button class="nt-btn small" data-link="calendar">School Calendar</button></div><div class="nt-activity">'+activityHtml(activities)+'</div></section>'+
  '<input id="ntHiddenPhoto" type="file" accept="image/jpeg,image/png,image/webp" hidden></div>';
- const readErrors=[extra.error,periods.error,runs.error,checkin.error,assignees.error,personal.error,notices.error,calendar.error,assignment.error].filter(Boolean);
+ const readErrors=[extra.error,periods.error,runs.error,checkin.error,assignees.error,personal.error,notices.error,calendar.error,assignment.error,membership.error].filter(Boolean);
  if(readErrors.length){const warning=document.createElement('p');warning.className='nt-followup';warning.textContent='Some school records could not be loaded. Check your account permissions or connection and try again.';wrapper.querySelector('.noor-t4')?.prepend(warning);}
  wrapper.addEventListener('click',onClick,{once:false});
  $('#ntHiddenPhoto').onchange=uploadPhoto;
