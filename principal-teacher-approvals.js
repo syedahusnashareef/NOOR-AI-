@@ -48,7 +48,30 @@ async function load(){
  }catch(e){box.querySelector('#ntPaList').textContent='Cannot load timetable requests: '+(e?.message||'Check access policy.');}
  finally{pending=false}
 }
-const observer=new MutationObserver(()=>{const view=document.getElementById('view-principal-studio');if(view?.classList.contains('active')&&view.querySelector('#noor-principal')&&!view.querySelector('#ntPrincipalApprovals'))load()});
+let channel=null,activeSchool='';
+function connectPrincipalLive(){
+ const app=a(),school=app?.schoolId;
+ if(!school||!['owner','principal'].includes(app.profile?.role)||!app.db)return;
+ if(channel&&activeSchool!==school){app.db.removeChannel(channel);channel=null}
+ if(channel)return;
+ activeSchool=school;
+ const changed=()=>{
+  const view=document.getElementById('view-principal-studio');
+  if(!view?.classList.contains('active'))return;
+  view.querySelector('#ntPrincipalApprovals')?.remove();
+  if(!pending)load();
+ };
+ channel=app.db.channel('noor-principal-teacher-live-'+school)
+ .on('postgres_changes',{event:'*',schema:'public',table:'noor_teacher_period_runs',filter:'school_id=eq.'+school},changed)
+ .on('postgres_changes',{event:'*',schema:'public',table:'noor_staff_attendance',filter:'school_id=eq.'+school},changed)
+ .on('postgres_changes',{event:'*',schema:'public',table:'noor_teacher_periods',filter:'school_id=eq.'+school},changed)
+ .subscribe(status=>{
+  const label=document.querySelector('#ntPrincipalApprovals .nt-pa-sub');
+  if(label&&status==='SUBSCRIBED')label.textContent='Live Teacher/Principal sync connected · school-scoped class activity.';
+ });
+}
+const observer=new MutationObserver(()=>{const view=document.getElementById('view-principal-studio');if(view?.classList.contains('active')&&view.querySelector('#noor-principal')){connectPrincipalLive();if(!view.querySelector('#ntPrincipalApprovals'))load()}});
+
 observer.observe(document.body,{subtree:true,childList:true});
 setInterval(()=>{const view=document.getElementById('view-principal-studio');if(view?.classList.contains('active')&&Date.now()-loadedAt>60000&&!pending){view.querySelector('#ntPrincipalApprovals')?.remove();load()}},60000);
 })();
