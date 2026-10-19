@@ -64,7 +64,7 @@ async function mount(){
  const ids=[...new Set(model.assignments.map(x=>x.class_id))];
  const [c,s]=await Promise.all([
  db.from('classes').select('id,name').eq('school_id',a.schoolId).eq('is_active',true).in('id',ids).limit(200),
- db.from('sections').select('id,class_id,name').eq('school_id',a.schoolId).eq('is_active',true).in('class_id',ids).limit(300)
+ db.from('sections').select('id,class_id,name').eq('is_active',true).in('class_id',ids).limit(300)
  ]);
  if(v!==revision||!root())return;
  if(c.error||s.error){$('#ntAttTable').textContent=(c.error||s.error).message;return}
