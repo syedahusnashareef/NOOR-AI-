@@ -37,15 +37,15 @@ async function mount(){
   const db=app.db,school=app.schoolId,user=app.user.id;
   const [att,periods,tasks]=await Promise.all([
    db.from('noor_staff_attendance').select('id,status,checked_in_at').eq('school_id',school).eq('teacher_id',user).eq('attendance_date',today()).maybeSingle(),
-   db.from('noor_teacher_periods').select('id,weekday,period_number,start_time,end_time,subject_name,class_label,status').eq('school_id',school).eq('teacher_id',user).eq('weekday',new Date().getDay()).order('start_time'),
+   db.from('noor_teacher_periods').select('id,weekday,period_number,start_time,end_time,subject_name,class_label,status,approval_status').eq('school_id',school).eq('teacher_id',user).eq('weekday',new Date().getDay()).order('start_time'),
    db.from('noor_teacher_tasks').select('id,title,status,due_date,priority').eq('school_id',school).eq('teacher_id',user).order('due_date',{ascending:true}).limit(8)
   ]);
   const errors=[att.error,periods.error,tasks.error].filter(Boolean);
   const present=att.data?.status==='present';
   const now=new Date().toTimeString().slice(0,5);
   const periodHtml=(periods.data||[]).map(p=>{
-   const state=p.status==='done'?'done':time(p.start_time)<=now&&now<time(p.end_time)?'current':'upcoming';
-   return `<div class="nts-period ${state}"><span class="nts-chip">P${Number(p.period_number)||'?'}</span><div><strong>${escape(p.subject_name)} · ${escape(p.class_label)}</strong><small>${escape(time(p.start_time))}–${escape(time(p.end_time))} · ${state}</small><div class="nts-actions"><button data-period="${escape(p.id)}" data-action="start" ${state==='done'?'disabled':''}>Start class</button><button data-period="${escape(p.id)}" data-action="done" ${state==='done'?'disabled':''}>Finish class</button></div></div></div>`;
+   const approved=p.approval_status==='approved';const state=!approved?'upcoming':p.status==='done'?'done':time(p.start_time)<=now&&now<time(p.end_time)?'current':'upcoming';
+   return `<div class="nts-period ${state}"><span class="nts-chip">P${Number(p.period_number)||'?'}</span><div><strong>${escape(p.subject_name)} · ${escape(p.class_label)}</strong><small>${escape(time(p.start_time))}–${escape(time(p.end_time))} · ${approved?state:'Awaiting Principal approval'}</small><div class="nts-actions"><button data-period="${escape(p.id)}" data-action="start" ${!approved||state==='done'?'disabled':''}>Start class</button><button data-period="${escape(p.id)}" data-action="done" ${!approved||state==='done'?'disabled':''}>Finish class</button></div></div></div>`;
   }).join('');
   const box=document.createElement('section');box.className='noor-teacher-studio';box.dataset.key=key;
   box.innerHTML=`<div class="nts-hero"><small>NOOR · TEACHER WORKSPACE</small><h2>Hello, ${escape(app.profile.full_name||'Teacher')}</h2><span>Today's timetable, attendance and priorities</span></div>
