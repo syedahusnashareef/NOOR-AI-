@@ -16,8 +16,8 @@
           <label class="sound-switch" aria-label="Master Sound ON/OFF"><input type="checkbox" id="soundMasterToggle"><span></span></label>
         </div>
         <div class="sound-volume-row">
-          <div class="sound-control-copy"><b>Volume</b><small>Gentle maximum: 50% of device output</small></div>
-          <div class="sound-volume-control"><input id="soundVolumeSlider" type="range" min="0" max="0.5" step="0.01" aria-label="Sound volume"><output id="soundVolumeValue" for="soundVolumeSlider">32%</output></div>
+          <div class="sound-control-copy"><b>Volume</b><small>Volume can reach 100% of device output</small></div>
+          <div class="sound-volume-control"><input id="soundVolumeSlider" type="range" min="0" max="1" step="0.01" aria-label="Sound volume"><output id="soundVolumeValue" for="soundVolumeSlider">100%</output></div>
         </div>
         <div class="sound-toggle-grid">
           <div class="sound-minor-row"><div class="sound-control-copy"><b>Voice cheers</b><small>Short cheers only for badges, results and milestones.</small></div><label class="sound-switch" aria-label="Voice Cheers ON/OFF"><input type="checkbox" id="soundVoiceToggle"><span></span></label></div>
@@ -56,7 +56,7 @@
     reflect(manager()?.getPreferences?.() || {});
     master.addEventListener("change", () => manager()?.setPreferences({ masterSound: master.checked }));
     volume.addEventListener("input", () => {
-      const value = Math.min(0.5, Math.max(0, Number(volume.value) || 0));
+      const value = Math.min(1, Math.max(0, Number(volume.value) || 0));
       volumeLabel.value = Math.round(value * 100) + "%";
       volumeLabel.textContent = volumeLabel.value;
       manager()?.setVolume(value);
