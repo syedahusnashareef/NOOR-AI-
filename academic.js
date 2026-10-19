@@ -118,6 +118,7 @@ async function imageData(inputId){
  for(const f of files){
   const dataUrl=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result));r.onerror=()=>no(new Error('Could not read an image.'));r.readAsDataURL(f);});
   if(canArchiveSource){
+   try{
   const safe=f.name.replace(/[^A-Za-z0-9._-]/g,'_').slice(-120);
   const path=c.school_id+'/'+u().id+'/'+crypto.randomUUID()+'-'+safe;
   const up=await db().storage.from('noor-syllabus-source').upload(path,f,{contentType:f.type,upsert:false});
@@ -126,6 +127,7 @@ async function imageData(inputId){
   const meta=await db().from('syllabus_uploads').insert(row).select('id').single();
   if(meta.error){await db().storage.from('noor-syllabus-source').remove([path]);throw new Error('Could not register uploaded source page: '+meta.error.message);}
   state.sourceFileIds.push(meta.data.id);state.sourceUploadPaths.push(path);
+   }catch(archiveError){console.warn('Optional source archive skipped. Notes generation remains available.');}
   }
   out.push(dataUrl);
  }
@@ -211,7 +213,7 @@ async function renderUnits(){
 async function loadMyNotes(){
  const box=$('myNotesList');if(!box)return;let q=db().from('smart_notes').select('id,title,status,published_to_students,updated_at,content,source_file_ids').eq('school_id',sid()).order('updated_at',{ascending:false}).limit(40);
  if(role()==='teacher')q=q.eq('teacher_id',u().id);
- const r=await q;if(r.error){box.innerHTML=notice('noteLoadError',err(r.error),'error');return;}state.notes=r.data||[];
+ const r=await q;if(r.error){box.innerHTML=notice('noteLoadError',err(r.error),'error');await loadPrivateNotes();return;}state.notes=r.data||[];
  box.innerHTML=state.notes.length?state.notes.map(x=>'<div style="padding:10px 0;border-bottom:1px solid var(--line)"><b>'+E(x.title)+'</b><div class="acad-muted">'+E(x.status)+' · '+E(new Date(x.updated_at).toLocaleDateString())+'</div><button class="acad-btn alt" type="button" data-opennote="'+E(x.id)+'">Open</button>'+(x.source_file_ids?.length?' <button class="acad-btn alt" type="button" data-sources="'+E(x.id)+'">View source pages ('+x.source_file_ids.length+')</button><div id="sources-'+E(x.id)+'"></div>':'')+'</div>').join(''):empty('No saved notes yet.');
  box.querySelectorAll('[data-opennote]').forEach(b=>b.onclick=()=>openNote(b.dataset.opennote));
  box.querySelectorAll('[data-sources]').forEach(b=>b.onclick=()=>loadSourceLinks(b.dataset.sources));
