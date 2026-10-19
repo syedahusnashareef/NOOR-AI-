@@ -112,11 +112,12 @@ async function imageData(inputId){
  }
  if(!files.length)return [];
  const c=context(val('acadTopic'));
- if(!c.school_id||!c.academic_year_id||!c.class_id||!c.subject_id)throw new Error('Choose academic year, class and subject before uploading images.');
+ const canArchiveSource=Boolean(c.school_id&&c.academic_year_id&&c.class_id&&c.subject_id);
  state.sourceFileIds=[];state.sourceUploadPaths=[];
  const out=[];
  for(const f of files){
   const dataUrl=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(String(r.result));r.onerror=()=>no(new Error('Could not read an image.'));r.readAsDataURL(f);});
+  if(canArchiveSource){
   const safe=f.name.replace(/[^A-Za-z0-9._-]/g,'_').slice(-120);
   const path=c.school_id+'/'+u().id+'/'+crypto.randomUUID()+'-'+safe;
   const up=await db().storage.from('noor-syllabus-source').upload(path,f,{contentType:f.type,upsert:false});
@@ -124,14 +125,16 @@ async function imageData(inputId){
   const row={school_id:c.school_id,academic_year_id:c.academic_year_id,uploaded_by:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,unit_id:c.unit_id,storage_path:path,original_file_name:f.name.slice(0,255),mime_type:f.type,file_size_bytes:f.size,extraction_confidence:'not_run'};
   const meta=await db().from('syllabus_uploads').insert(row).select('id').single();
   if(meta.error){await db().storage.from('noor-syllabus-source').remove([path]);throw new Error('Could not register uploaded source page: '+meta.error.message);}
-  state.sourceFileIds.push(meta.data.id);state.sourceUploadPaths.push(path);out.push(dataUrl);
+  state.sourceFileIds.push(meta.data.id);state.sourceUploadPaths.push(path);
+  }
+  out.push(dataUrl);
  }
  return out;
 }
 function renderTeaching(){
- const body='<div class="acad-grid"><section class="acad-panel"><h3>AI Smart Notes Generator</h3><p>Enter a few rough points or upload multiple syllabus photographs. OCR output is editable and AI notes remain a draft until teacher approval.</p><form id="notesForm" class="acad-form">'+contextHtml()+
- '<div class="field"><label for="acadTopic">Topic / lesson title *</label><input id="acadTopic" required maxlength="240"></div><div class="field"><label for="acadLanguage">Notes language</label><select id="acadLanguage"><option>English</option><option>Urdu</option><option>Hindi</option><option>Arabic</option><option>Telugu</option><option>Bilingual (English + Urdu)</option><option>Other</option></select></div>'+
- ta('roughNotes','Rough notes / keywords','A few bullet points or a short explanation')+
+ const body='<div class="acad-grid"><section class="acad-panel"><h3>AI Smart Notes Generator</h3><p><b>Choose a photo OR type a short description.</b> All academic details are optional for a private draft.</p><form id="notesForm" class="acad-form"><details class="acad-context-optional"><summary>Optional: year, class, subject & chapter (needed only to publish)</summary>'+contextHtml().replaceAll(' required','')+'</details>'+
+ '<div class="field"><label for="acadTopic">Topic / title (optional)</label><input id="acadTopic" maxlength="240" placeholder="e.g. Photosynthesis"></div><div class="field"><label for="acadLanguage">Notes language</label><select id="acadLanguage"><option>English</option><option>Urdu</option><option>Hindi</option><option>Arabic</option><option>Telugu</option><option>Bilingual (English + Urdu)</option><option>Other</option></select></div>'+
+ ta('roughNotes','Short description (optional if you chose a photo)','e.g. Explain water cycle for children')+
  '<div class="field"><label for="syllabusImages">Choose photo from phone / computer · syllabus / textbook</label><input id="syllabusImages" type="file" accept="image/jpeg,image/png,image/webp" multiple><div class="acad-field-help">Phone: tap Choose Files to select Gallery, Camera or Files (depending on device). Computer: select image files.</div><div class="acad-field-help">Max 8 images per request. PDF/DOC files are not enabled in this release.</div></div>'+
  '<div class="acad-actions">'+btn('extractSyllabusBtn','1 · Read photo text','alt')+btn('generateNotesBtn','2 · AI Create Smart Notes')+'</div><div id="ocrStatus" style="display:none"></div>'+
  ta('reviewedSyllabusText','Reviewed extracted text','Correct OCR mistakes here before generating notes')+
@@ -140,13 +143,13 @@ function renderTeaching(){
  '<div class="acad-actions">'+btn('saveNotesDraft','Save draft','alt')+btn('publishNotes','Approve & publish','gold')+btn('printNotes','Print / Save PDF','alt')+'</div></form></section>'+
  '<section class="acad-panel"><h3>Define syllabus units</h3><p>Configure chapters, lessons and topics for the selected school, year, class and subject.</p><form id="unitForm" class="acad-form"><p class="acad-muted">Uses the same year, class, section and subject selected above for Smart Notes.</p>'+
  '<div class="acad-fields"><div class="field"><label for="unitType">Unit type</label><select id="unitType"><option value="chapter">Chapter</option><option value="lesson">Lesson</option><option value="topic">Topic</option></select></div><div class="field"><label for="unitSequence">Sequence</label><input id="unitSequence" type="number" min="0" value="1"></div><div class="field full"><label for="unitTitle">Unit title *</label><input id="unitTitle" required maxlength="240"></div><div class="field"><label for="unitWeight">Optional syllabus weight</label><input id="unitWeight" type="number" min="0" max="100" step="0.1"></div></div>'+btn('createUnitBtn','Add curriculum unit')+'</form><div id="unitList" style="margin-top:14px"></div></section>'+
- '<section class="acad-panel"><h3>My saved notes</h3><p>Continue drafts or view already-published classroom materials.</p><div id="myNotesList">'+empty('Loading…')+'</div></section></div>';
+ '<section class="acad-panel"><h3>My saved notes</h3><p>Quick private drafts require no extra fields. Publishing to a class requires school details.</p><div id="myPrivateNotesList"></div><div id="myNotesList">'+empty('Loading…')+'</div></section></div>';
  $('view-teaching').innerHTML=shell('Teacher workspace','My Teaching & Smart Notes','Subject-wise notes, syllabus tracking and teacher-reviewed materials using your assigned classes.',body);
- $('notesForm').onsubmit=e=>e.preventDefault();$('extractSyllabusBtn').onclick=extractImages;$('generateNotesBtn').onclick=generateNotes;$('saveNotesDraft').onclick=()=>saveNotes(false);$('publishNotes').onclick=()=>saveNotes(true);$('printNotes').onclick=()=>window.print();$('createUnitBtn').onclick=createUnit;
+ $('notesForm').onsubmit=e=>e.preventDefault();$('syllabusImages').onchange=()=>{state.images=[];state.ocrOutput=null;};$('extractSyllabusBtn').onclick=extractImages;$('generateNotesBtn').onclick=generateNotes;$('saveNotesDraft').onclick=()=>saveNotes(false);$('publishNotes').onclick=()=>saveNotes(true);$('printNotes').onclick=()=>window.print();$('createUnitBtn').onclick=createUnit;
  loadContext().then(()=>{setDefaults();renderUnits();loadMyNotes();}).catch(e=>status('notesAiStatus',err(e),'error'));
 }
 async function extractImages(){
- try{status('ocrStatus','Extracting page text…');const c=context(val('acadTopic'));if(!c.school_id||!c.academic_year_id||!c.class_id||!c.subject_id)throw new Error('Select year, class and subject first.');
+ try{status('ocrStatus','Extracting page text…');const c=context(val('acadTopic'));if(!c.school_id)throw new Error('Sign in to your school first.');
  const imgs=await imageData('syllabusImages');if(!imgs.length)throw new Error('Choose syllabus photographs first.');
  const r=await ai({...c,action:'extract_text',language:val('acadLanguage'),rough_text:val('roughNotes'),images:imgs});
  state.ocrOutput=r.output;state.images=imgs;$('reviewedSyllabusText').value=r.output?.extracted_text||'';
@@ -154,8 +157,9 @@ async function extractImages(){
  }catch(e){status('ocrStatus',err(e),'error');}
 }
 async function generateNotes(){
- try{status('notesAiStatus','Generating notes…');const c=context(val('acadTopic'));if(!c.school_id||!c.academic_year_id||!c.class_id||!c.subject_id||!c.topic)throw new Error('Select year, class and subject, and enter a topic.');
+ try{status('notesAiStatus','Generating notes…');const c=context(val('acadTopic'));if(!c.school_id)throw new Error('Sign in to your school first.');
  let imgs=state.images||[];if(!imgs.length)imgs=await imageData('syllabusImages');
+ if(!imgs.length&&!val('roughNotes')&&!val('reviewedSyllabusText')&&!c.topic)throw new Error('Choose a photo OR type a short description to generate notes.');
  const r=await ai({...c,action:'notes',language:val('acadLanguage'),rough_text:val('roughNotes'),reviewed_source_text:val('reviewedSyllabusText'),images:imgs});
  state.lastAI=r.output;state.noteContext=c;$('notesOutput').innerHTML=outputHtml(r.output);$('notesEditor').value=readableText(r.output);
  status('notesAiStatus','AI draft created. Teacher review is required before publishing. Tokens used: '+(r.usage?.input_tokens||0)+' input / '+(r.usage?.output_tokens||0)+' output.','success');
@@ -165,7 +169,15 @@ async function saveNotes(publish){
  try{
  if(!state.lastAI||!state.noteContext)throw new Error('Generate notes first.');
  if(publish&&!confirm('Publish this reviewed note to the selected class / section?'))return;
- const edited=val('notesEditor');if(!edited)throw new Error('Review the generated notes in the editor before saving.');const content={...state.lastAI,notes_text:edited,teacher_edited:true};const c=state.noteContext,row={school_id:c.school_id,academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,unit_id:c.unit_id,title:String(state.lastAI.title||c.topic).slice(0,240),source_text:val('roughNotes'),extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run',source_file_ids:state.sourceFileIds||[],content,status:publish?'published':'draft',published_to_students:!!publish,published_at:publish?new Date().toISOString():null,created_by:u().id,updated_by:u().id};
+ const edited=val('notesEditor');if(!edited)throw new Error('Review the generated notes before saving.');const content={...state.lastAI,notes_text:edited,teacher_edited:true};const c=context(val('acadTopic')||state.noteContext?.topic||state.lastAI.title);
+ const hasAcademicDetails=Boolean(c.academic_year_id&&c.class_id&&c.subject_id);
+ if(!hasAcademicDetails&&!publish){
+   const row={school_id:sid(),teacher_id:u().id,title:String(state.lastAI.title||c.topic||'Smart Notes').slice(0,240),language:val('acadLanguage')||'English',source_description:val('roughNotes'),content,updated_at:new Date().toISOString()};
+   const req=state.quickNoteId?db().from('noor_private_smart_notes').update(row).eq('id',state.quickNoteId).eq('teacher_id',u().id).select('id').single():db().from('noor_private_smart_notes').insert(row).select('id').single();
+   const res=await req;if(res.error)throw res.error;state.quickNoteId=res.data.id;msg('Saved privately. Class/subject are optional.','success');await loadPrivateNotes();return;
+ }
+ if(!hasAcademicDetails)throw new Error('To publish for students, choose academic year, your assigned class and subject in Optional school details. You can generate and save private drafts without these fields.');
+ const row={school_id:c.school_id,academic_year_id:c.academic_year_id,teacher_id:u().id,class_id:c.class_id,section_id:c.section_id,subject_id:c.subject_id,unit_id:c.unit_id,title:String(state.lastAI.title||c.topic||'Smart Notes').slice(0,240),source_text:val('roughNotes'),extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run',source_file_ids:state.sourceFileIds||[],content,status:publish?'published':'draft',published_to_students:!!publish,published_at:publish?new Date().toISOString():null,created_by:u().id,updated_by:u().id};
  let r=state.editNoteId?await db().from('smart_notes').update(row).eq('id',state.editNoteId).select('id').single():await db().from('smart_notes').insert(row).select('id').single();
  if(r.error)throw r.error;state.editNoteId=r.data.id;state.lastAI=content;$('notesOutput').innerHTML=outputHtml(content);if(state.sourceFileIds?.length){const attach=await db().from('syllabus_uploads').update({note_id:r.data.id,extracted_text:val('reviewedSyllabusText'),extraction_confidence:state.ocrOutput?.confidence||'not_run'}).in('id',state.sourceFileIds);if(attach.error)throw attach.error;}msg(publish?'Reviewed notes published.':'Draft saved to the database.','success');await loadMyNotes();
  }catch(e){msg(err(e),'error');}
@@ -203,6 +215,21 @@ async function loadMyNotes(){
  box.innerHTML=state.notes.length?state.notes.map(x=>'<div style="padding:10px 0;border-bottom:1px solid var(--line)"><b>'+E(x.title)+'</b><div class="acad-muted">'+E(x.status)+' · '+E(new Date(x.updated_at).toLocaleDateString())+'</div><button class="acad-btn alt" type="button" data-opennote="'+E(x.id)+'">Open</button>'+(x.source_file_ids?.length?' <button class="acad-btn alt" type="button" data-sources="'+E(x.id)+'">View source pages ('+x.source_file_ids.length+')</button><div id="sources-'+E(x.id)+'"></div>':'')+'</div>').join(''):empty('No saved notes yet.');
  box.querySelectorAll('[data-opennote]').forEach(b=>b.onclick=()=>openNote(b.dataset.opennote));
  box.querySelectorAll('[data-sources]').forEach(b=>b.onclick=()=>loadSourceLinks(b.dataset.sources));
+ await loadPrivateNotes();
+}
+async function loadPrivateNotes(){
+ const box=$('myPrivateNotesList');if(!box||role()!=='teacher')return;
+ const r=await db().from('noor_private_smart_notes').select('id,title,language,updated_at,content,source_description').eq('school_id',sid()).eq('teacher_id',u().id).order('updated_at',{ascending:false}).limit(25);
+ if(r.error){box.innerHTML=notice('privateDraftError',err(r.error),'error');return;}
+ state.privateNotes=r.data||[];
+ box.innerHTML='<h4>My private Smart Notes drafts</h4>'+((r.data||[]).map(x=>'<div style="padding:9px 0;border-bottom:1px solid var(--line)"><b>'+E(x.title)+'</b><div class="acad-muted">'+E(x.language)+' · '+E(new Date(x.updated_at).toLocaleDateString())+'</div><button class="acad-btn alt" type="button" data-quick-note="'+E(x.id)+'">Edit this draft</button></div>').join('')||'<p class="acad-muted">No private drafts yet.</p>');
+ box.querySelectorAll('[data-quick-note]').forEach(b=>b.onclick=()=>{
+  const x=state.privateNotes.find(n=>n.id===b.dataset.quickNote);if(!x)return;
+  state.quickNoteId=x.id;state.editNoteId=null;state.lastAI=x.content;state.noteContext={school_id:sid(),topic:x.title};state.images=[];
+  $('notesEditor').value=readableText(x.content);$('notesOutput').innerHTML=outputHtml(x.content);
+  $('acadTopic').value=x.title;$('roughNotes').value=x.source_description||'';$('acadLanguage').value=x.language||'English';
+  $('notesEditor').scrollIntoView({behavior:'smooth',block:'center'});msg('Private draft opened. Edit or publish to an assigned class later.','success');
+ });
 }
 async function loadSourceLinks(noteId){
  const box=$('sources-'+noteId);if(!box)return;
