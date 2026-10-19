@@ -146,3 +146,32 @@
 @media(max-width:760px){#workspace.noor-teacher-activated .sidebar{position:fixed;left:-265px;width:245px;top:0;height:100vh;border-radius:0}#workspace.noor-teacher-activated .sidebar.open{left:0}.noor-t4 .nt-card{padding:15px}.noor-t4 .nt-head{gap:8px}.noor-t4 h1{font-size:25px}.noor-t4 .nt-profile{grid-template-columns:90px minmax(0,1fr);align-items:start}.noor-t4 .nt-photo{font-size:29px;border-width:4px}.noor-t4 .nt-camera{height:30px;width:30px;font-size:14px;right:0;bottom:0}.noor-t4 .nt-person-head{flex-wrap:wrap}.noor-t4 .nt-person-head h2{font-size:20px}.noor-t4 .nt-profile-grid{grid-template-columns:1fr}.noor-t4 .nt-quote{grid-column:1/-1}}
 @media(max-width:500px){.noor-t4 .nt-columns{display:block}.noor-t4 .nt-period{grid-template-columns:54px 33px minmax(0,1fr);gap:7px;margin-left:8px;padding:10px}.noor-t4 .nt-period:before{left:-27px}.noor-t4 .nt-timeline{padding-left:16px;margin-left:8px}.noor-t4 .nt-subject-icon{width:33px;height:33px;font-size:15px}.noor-t4 .nt-period .nt-complete-btn{grid-column:2/4;width:100%;font-size:11px}.noor-t4 .nt-att-head{align-items:start}.noor-t4 .nt-att-summary{justify-content:flex-start}.noor-t4 .nt-att-table th,.noor-t4 .nt-att-table td{padding:8px 5px;font-size:11px}.noor-t4 .nt-radio{width:20px;height:20px}.nt4-dialog form{grid-template-columns:1fr}.nt4-dialog .nt4-span{grid-column:1}}
 @media(prefers-reduced-motion:reduce){.noor-t4 *{transition:none!important;animation:none!important}}
+
+
+/* Consistent burgundy look for full Student Attendance and Smart Notes */
+#workspace.noor-teacher-activated #view-attendance .ta-page{color:#4c2738}
+#workspace.noor-teacher-activated #view-attendance .ta-header h1{color:#511e34}
+#workspace.noor-teacher-activated #view-attendance .ta-panel{border:1px solid #efdee5;border-radius:21px;box-shadow:0 12px 30px #57243c0d}
+#workspace.noor-teacher-activated #view-attendance .ta-stat{background:#f7eaf0;color:#8a425f}
+#workspace.noor-teacher-activated #view-attendance .ta-avatar{background:#f9e6ed;color:#8b4261}
+#workspace.noor-teacher-activated #view-attendance .ta-primary{background:#6b2a45;color:white}
+#workspace.noor-teacher-activated #view-attendance .ta-soft{background:#faebf0;color:#73344c;border-color:#edcddd}
+#workspace.noor-teacher-activated #view-attendance .ta-fields label{color:#70455b}
+#workspace.noor-teacher-activated #view-attendance .ta-fields input,
+#workspace.noor-teacher-activated #view-attendance .ta-fields select{border-color:#e8d1dc;background:#fffafc}
+#workspace.noor-teacher-activated #view-attendance .ta-buttons [data-status=present][aria-pressed=true]{background:#ddf6e7;color:#187444}
+#workspace.noor-teacher-activated #view-attendance .ta-buttons [data-status=absent][aria-pressed=true]{background:#ffe6e9;color:#bc3c51}
+#workspace.noor-teacher-activated #view-attendance .ta-buttons [data-status=late][aria-pressed=true]{background:#fff2d8;color:#ad761f}
+#workspace.noor-teacher-activated #view-teaching .acad-hero{background:linear-gradient(120deg,#67243e,#8f4965);color:white;border-radius:22px}
+#workspace.noor-teacher-activated #view-teaching .acad-hero h1,
+#workspace.noor-teacher-activated #view-teaching .acad-hero p{color:white}
+#workspace.noor-teacher-activated #view-teaching .acad-panel{background:#fff;border:1px solid #f0dee6;border-radius:22px;box-shadow:0 11px 29px #4b1e350c}
+#workspace.noor-teacher-activated #view-teaching .acad-panel h3{color:#542238;font-size:18px}
+#workspace.noor-teacher-activated #view-teaching .acad-btn{background:#6b2c47;color:white;border-radius:12px}
+#workspace.noor-teacher-activated #view-teaching .acad-btn.alt{background:#f7e7ee;color:#6b2c47}
+#workspace.noor-teacher-activated #view-teaching .acad-context-optional{border:1px solid #ead8e1;border-radius:14px;padding:11px;background:#fff8fb}
+#workspace.noor-teacher-activated #view-teaching .acad-context-optional summary{cursor:pointer;color:#753750;font-weight:850;padding:7px}
+#workspace.noor-teacher-activated #view-teaching #syllabusImages{border:2px dashed #e4c6d5;background:#fff5fa;border-radius:14px;padding:16px}
+#workspace.noor-teacher-activated #view-teaching #notesEditor{min-height:250px}
+#workspace.noor-teacher-activated #view-teaching #notesAiStatus,
+#workspace.noor-teacher-activated #view-teaching #ocrStatus{display:block!important;min-height:0}
