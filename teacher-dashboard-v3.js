@@ -75,7 +75,7 @@ const themeFor=id=>{try{return localStorage.getItem(themeKey(id))||'lavender'}ca
 function applyTheme(choice){const el=document.querySelector('#workspace .app-shell'),a=app();if(!el||!a?.user)return;const theme=['lavender','rose','ivory'].includes(choice)?choice:'lavender';el.dataset.teacherLook=theme;try{localStorage.setItem(themeKey(a.user.id),theme)}catch{}
  document.querySelectorAll('.ntv3-choice [data-choice]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.choice===theme)));}
 async function render(){
- const a=app(),r=root();if(!a?.user||a.profile?.role!=='teacher'||!a.schoolId||!r||busy||r.querySelector('.ntv3'))return;
+ const a=app(),r=root();if(!a?.user||a.profile?.role!=='teacher'||a.profile?.status!=='active'||!a.schoolId||!r||busy||r.querySelector('.ntv3'))return;
  if(document.getElementById('workspace')?.classList.contains('hidden'))return;
  busy=true;
  try{
@@ -110,6 +110,6 @@ async function render(){
  if([periods.error,attendance.error,assigned.error,notes.error,notices.error].some(Boolean)){const note=document.createElement('p');note.className='ntv3-status';note.textContent='Some data could not be loaded. Check your school permissions.';box.append(note)}
  }catch(e){console.warn('NOOR teacher workspace UI',e)}finally{busy=false}
 }
-const observer=new MutationObserver(()=>{if(root()?.querySelector('.noor-teacher-studio')&&!root()?.querySelector('.ntv3'))render();const shell=document.querySelector('#workspace .app-shell');if(shell?.dataset.teacherLook&&document.getElementById('workspace')?.classList.contains('hidden'))delete shell.dataset.teacherLook});
+const observer=new MutationObserver(()=>{if(root()?.querySelector('.noor-teacher-studio')&&!root()?.querySelector('.ntv3'))render();const shell=document.querySelector('#workspace .app-shell');if(shell?.dataset.teacherLook&&(document.getElementById('workspace')?.classList.contains('hidden')||app()?.profile?.role!=='teacher'))delete shell.dataset.teacherLook});
 observer.observe(document.body,{subtree:true,childList:true});
 })();
