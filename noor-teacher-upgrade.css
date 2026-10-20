@@ -180,3 +180,110 @@ display:block;min-height:44px;width:100%;border-radius:11px;background:#fff;bord
  #ntTeacherIntelligence .nti-kpi span{font-size:11px}
  .noor-t4 .nt-profile{padding:12px!important}
 }
+
+/* 2026-10-20 confirmed user revision: NO round photo. Big portrait rectangle, WhatsApp-simple mobile teacher UX */
+#workspace.noor-teacher-activated .noor-t4 .nt-profile{
+ grid-template-columns:minmax(195px,245px) minmax(0,1fr) minmax(170px,.55fr);
+ align-items:center;
+}
+#workspace.noor-teacher-activated .noor-t4 .nt-profile .nt-photo-column{
+ width:100%;max-width:245px;position:relative;
+}
+#workspace.noor-teacher-activated .noor-t4 .nt-profile .nt-photo{
+ width:100%!important;min-width:0!important;max-width:100%!important;
+ aspect-ratio:4/5!important;height:auto!important;
+ border-radius:16px!important;border:3px solid #f7e6ee!important;
+ box-shadow:0 10px 30px #5c25401e;
+ background:linear-gradient(155deg,#f8e8ed,#dbbad0);
+}
+#workspace.noor-teacher-activated .noor-t4 .nt-profile .nt-photo img{
+ width:100%;height:100%;object-fit:cover;object-position:center top;border-radius:12px!important;
+}
+#workspace.noor-teacher-activated .noor-t4 .nt-profile .nt-camera{
+ right:10px!important;bottom:10px!important;width:44px!important;height:44px!important;
+ border-radius:12px!important;background:#642c48!important;color:white!important;
+ border:2px solid white!important;box-shadow:0 3px 14px #37132455;
+}
+#ntTeacherIntelligence .nti-quick-grid{
+ display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 16px;
+}
+#ntTeacherIntelligence .nti-quick-grid button{
+ cursor:pointer;text-align:left;min-height:96px;padding:13px;display:grid;align-content:center;gap:7px;
+ border:1px solid #ead2df;border-radius:15px;background:linear-gradient(140deg,#fffdfd,#fff3f8);color:#602c46;
+}
+#ntTeacherIntelligence .nti-quick-grid button:nth-child(4n+2){background:linear-gradient(130deg,#faf1ff,#fffaff)}
+#ntTeacherIntelligence .nti-quick-grid button:nth-child(4n+3){background:linear-gradient(130deg,#eaf8f7,#f9fffd)}
+#ntTeacherIntelligence .nti-quick-grid button:nth-child(4n+4){background:linear-gradient(130deg,#fff5e9,#fffcf5)}
+#ntTeacherIntelligence .nti-quick-grid button b{font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+#ntTeacherIntelligence .nti-quick-grid button small{font-size:12px;color:#88737e;line-height:1.35}
+#ntTeacherIntelligence .nti-quick-grid button:focus-visible{
+ outline:3px solid #aa688a;outline-offset:2px
+}
+@media(max-width:1150px) {
+ #workspace.noor-teacher-activated .noor-t4 .nt-profile{
+  grid-template-columns:minmax(170px,210px) minmax(0,1fr);
+ }
+ #ntTeacherIntelligence .nti-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:760px){
+ #workspace.noor-teacher-activated #view-overview,
+ #workspace.noor-teacher-handset #view-overview{overflow-x:clip!important;width:100%!important}
+ #workspace.noor-teacher-activated .noor-t4 .nt-profile,
+ #workspace.noor-teacher-handset .noor-t4 .nt-profile{
+  display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:16px!important;
+  padding:18px!important;
+ }
+ #workspace.noor-teacher-activated .noor-t4 .nt-profile .nt-photo-column,
+ #workspace.noor-teacher-handset .noor-t4 .nt-profile .nt-photo-column{
+  width:min(100%,220px)!important;max-width:220px!important;margin:0 auto!important;
+  display:block!important;
+ }
+ #workspace.noor-teacher-activated .noor-t4 .nt-profile .nt-photo,
+ #workspace.noor-teacher-handset .noor-t4 .nt-profile .nt-photo{
+  width:100%!important;min-width:0!important;max-width:220px!important;
+  height:auto!important;aspect-ratio:4/5!important;border-radius:15px!important;
+  border:3px solid #f7e6ee!important;font-size:40px!important;
+ }
+ #workspace.noor-teacher-activated .noor-t4 .nt-profile .nt-camera,
+ #workspace.noor-teacher-handset .noor-t4 .nt-profile .nt-camera{
+  width:45px!important;height:45px!important;border-radius:12px!important;
+ }
+ #workspace.noor-teacher-activated .noor-t4 .nt-person-head{
+  flex-direction:column;gap:7px;justify-content:center;text-align:center!important;
+ }
+ #workspace.noor-teacher-activated .noor-t4 .nt-profile-grid{
+  background:#fff7fb;border-radius:13px;padding:10px 13px;
+  display:grid!important;grid-template-columns:minmax(0,1fr)!important;
+ }
+ #workspace.noor-teacher-activated .noor-t4 .nt-detail{overflow-wrap:anywhere;word-break:break-word}
+ #workspace.noor-teacher-activated .noor-t4 .nt-quote{min-height:60px!important}
+ #ntTeacherIntelligence .nti-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ #ntTeacherIntelligence .nti-quick-grid button{min-height:102px;padding:11px;gap:5px;border-radius:13px}
+ #ntTeacherIntelligence .nti-quick-grid b{font-size:13px!important}
+ #ntTeacherIntelligence .nti-quick-grid small{font-size:11px!important}
+ #workspace.noor-teacher-activated .noor-t4 .nt-attendance{scroll-margin-top:12px}
+ #ntTeacherIntelligence{margin:14px 0!important}
+ #ntTeacherIntelligence .nti-title{flex-direction:column;align-items:flex-start}
+ #ntTeacherIntelligence .nti-title .nti-refresh{align-self:stretch}
+ #ntTeacherIntelligence .nti-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+ #ntTeacherIntelligence .nti-kpi{min-height:110px;padding:12px}
+ #ntTeacherIntelligence .nti-kpi strong{font-size:24px}
+ #workspace.noor-teacher-activated .noor-t4 .nt-att-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+ #workspace.noor-teacher-activated .noor-t4 .nt-att-table{min-width:490px}
+ #workspace.noor-teacher-activated .noor-t4 .nt-btn{min-height:44px}
+ #workspace.noor-teacher-activated .noor-t4 .nt-period{
+  display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:10px!important;
+  padding:14px!important;margin:9px 0!important
+ }
+ #workspace.noor-teacher-activated .noor-t4 .nt-period:before{display:none!important}
+ #workspace.noor-teacher-activated .noor-t4 .nt-period .nt-subject-icon{display:none!important}
+ #workspace.noor-teacher-activated .noor-t4 .nt-period .nt-complete-btn{
+  grid-column:1!important;min-height:44px!important;width:100%!important;font-size:13px!important
+ }
+ #workspace.noor-teacher-activated .noor-t4 .nt-timeline{padding:0!important;margin:0!important}
+}
+@media(max-width:380px){
+ #ntTeacherIntelligence .nti-quick-grid{grid-template-columns:minmax(0,1fr)}
+ #ntTeacherIntelligence .nti-quick-grid button{min-height:67px}
+ #workspace.noor-teacher-activated .noor-t4 .nt-profile .nt-photo-column{max-width:200px!important}
+}
