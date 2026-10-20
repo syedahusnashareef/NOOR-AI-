@@ -121,6 +121,34 @@ async function render(){
  const readErrors=[extra.error,periods.error,runs.error,checkin.error,assignees.error,personal.error,notices.error,calendar.error,assignment.error,membership.error].filter(Boolean);
  if(readErrors.length){const warning=document.createElement('p');warning.className='nt-followup';warning.textContent='Some school records could not be loaded. Check your account permissions or connection and try again.';wrapper.querySelector('.noor-t4')?.prepend(warning);}
  const dash=wrapper.querySelector('.noor-t4'),profileNode=dash?.querySelector('.nt-profile');
+
+ // Reference-accurate Teacher Dashboard: all figures from scoped school records, no placeholder metrics.
+ const hero=document.createElement('div');hero.className='nt-reference-kpis';
+ const classContexts=[...new Map(approved.map(p=>[(p.class_id||p.class_label||'')+':'+(p.section_id||''),p])).values()];
+ const classTitle=classContexts.length===1?(classContexts[0].class_label||'Assigned class'):classContexts.length?classContexts.length+' assigned classes':'No assigned class';
+ const sectionTitle=classContexts.length===1?(classContexts[0].section_id?'Assigned section':'School section'):classContexts.length?'Multiple sections':'Not assigned';
+ hero.innerHTML='<div class="nt-reference-greeting"><span>Welcome back,</span> <strong>'+esc(name)+'</strong></div>'+
+ '<div class="nt-reference-kpi-grid"><div class="nt-reference-kpi purple"><span>♧</span><div><small>Class</small><b>'+esc(classTitle)+'</b></div></div>'+
+ '<div class="nt-reference-kpi pink"><span>♟</span><div><small>Section</small><b>'+esc(sectionTitle)+'</b></div></div>'+
+ '<div class="nt-reference-kpi green"><span>✓</span><div><small>Today’s Periods</small><b>'+complete+' / '+approved.length+'</b></div></div></div>';
+ const header=dash.querySelector('.nt-head');if(header)header.insertAdjacentElement('afterend',hero);
+ const referencePanels=document.createElement('section');referencePanels.className='nt-reference-panels';
+ const dayStats=approved.length?Math.round(complete/approved.length*100):null;
+ const dueTasks=assignedTasks.filter(x=>x.due_at&&new Date(x.due_at).getTime()<Date.now()).length;
+ const chartData=[{label:'Periods',done:complete,total:approved.length},{label:'Pending tasks',done:assignedTasks.length,total:assignedTasks.length+complete},{label:'Overdue',done:dueTasks,total:assignedTasks.length}];
+ referencePanels.innerHTML='<div class="nt-reference-chart-grid">'+
+ '<article class="nt-card nt-reference-chart"><div class="nt-card-head"><div><span class="nt-icon">▥</span><h2>Weekly Teaching Progress</h2></div><button type="button" class="nt-btn small" data-link="schedules">Timetable ↗</button></div>'+
+ '<div class="nt-reference-bars">'+chartData.map((x,i)=>'<div class="nt-reference-bar"><div class="nt-reference-bar-label"><span>'+esc(x.label)+'</span><b>'+x.done+(x.total?' / '+x.total:'')+'</b></div><div class="nt-reference-track"><span class="nt-reference-fill c'+i+'" style="width:'+(x.total?Math.min(100,Math.round(x.done/x.total*100)):0)+'%"></span></div></div>').join('')+'</div>'+
+ '<p class="nt-muted">Live workload summary · No invented subject marks</p></article>'+
+ '<article class="nt-card nt-reference-chart"><div class="nt-card-head"><div><span class="nt-icon">◉</span><h2>Today’s Progress</h2></div><button type="button" class="nt-btn small" data-link="attendance">Attendance ↗</button></div>'+
+ '<div class="nt-reference-ring" style="--progress:'+(dayStats??0)+'"><div><strong>'+(dayStats===null?'—':dayStats+'%')+'</strong><small>Periods complete</small></div></div>'+
+ '<div class="nt-reference-ring-caption">'+complete+' completed · '+Math.max(0,approved.length-complete)+' remaining</div></article></div>'+
+ '<div class="nt-reference-quick nt-card"><div class="nt-card-head"><div><span class="nt-icon">✦</span><h2>Quick Actions</h2></div></div><div class="nt-reference-action-grid">'+
+ [['✓','Take Attendance','attendance'],['✎','Create Assignment','paper-generator'],['▤','Smart Notes','teaching'],['▣','School Calendar','school-calendar'],['◷','Timetable','schedules'],['◈','Assessments','assessments']].map(([icon,label,route])=>'<button type="button" class="nt-reference-action" data-link="'+route+'"><span>'+icon+'</span><b>'+label+'</b></button>').join('')+'</div></div>';
+ const activityPanel=dash.querySelector('.nt-card .nt-activity');
+ if(activityPanel){const parent=activityPanel.closest('.nt-card');parent?.insertAdjacentElement('beforebegin',referencePanels);}
+ else dash.append(referencePanels);
+
  if(dash&&profileNode){const hub=document.createElement('section');hub.id='ntTeacherIntelligence';hub.setAttribute('aria-label','AI Teacher Command Centre');
  hub.innerHTML='<div class="nti-title"><div><span class="nti-eyebrow">NOOR · LIVE TEACHER WORKSPACE</span><h2>✦ AI Teacher Command Centre</h2><p>Today\'s periods, assigned classes, syllabus tracking and student progress</p></div><button type="button" class="nti-refresh" onclick="window.NOOR_TEACHER_INTELLIGENCE?.mount?.(window.NOOR_TEACHER_REFERENCE?.getCurrent?.())">↻ Refresh</button></div>'+
  '<div class="nti-quick-grid">'+
