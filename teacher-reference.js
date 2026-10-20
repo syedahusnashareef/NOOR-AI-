@@ -145,7 +145,7 @@ async function render(){
  '<div class="nt-reference-ring" style="--progress:'+(dayStats??0)+'"><div><strong>'+(dayStats===null?'—':dayStats+'%')+'</strong><small>Periods complete</small></div></div>'+
  '<div class="nt-reference-ring-caption">'+complete+' completed · '+Math.max(0,approved.length-complete)+' remaining</div></article></div>'+
  '<div class="nt-reference-quick nt-card"><div class="nt-card-head"><div><span class="nt-icon">✦</span><h2>Quick Actions</h2></div></div><div class="nt-reference-action-grid">'+
- [['✓','Take Attendance','attendance'],['✎','Create Assignment','paper-generator'],['▤','Smart Notes','teaching'],['▣','School Calendar','school-calendar'],['◷','Timetable','schedules'],['◈','Assessments','assessments']].map(([icon,label,route])=>'<button type="button" class="nt-reference-action" data-link="'+route+'"><span>'+icon+'</span><b>'+label+'</b></button>').join('')+'</div></div>';
+ [['✓','Take Attendance','attendance'],['✎','Generate Paper','paper-generator'],['▤','Smart Notes','teaching'],['▣','School Calendar','school-calendar'],['◷','Edit Timetable','edit-timetable'],['◈','Assessments','assessments']].map(([icon,label,route])=>'<button type="button" class="nt-reference-action" data-link="'+route+'"><span>'+icon+'</span><b>'+label+'</b></button>').join('')+'</div></div>';
  const activityPanel=dash.querySelector('.nt-activity');
  if(activityPanel){const parent=activityPanel.closest('.nt-card');parent?.insertAdjacentElement('beforebegin',referencePanels);}
  else dash.append(referencePanels);
@@ -182,7 +182,7 @@ async function render(){
 }
 function onClick(e){
  const b=e.target.closest('button');if(!b||!b.closest('.noor-t4'))return;
- if(b.dataset.link){if(b.dataset.link==='paper-generator')openPaper();else if(b.dataset.link==='calendar')openCalendar();else openView(b.dataset.link);return;}
+ if(b.dataset.link){if(b.dataset.link==='paper-generator')openPaper();else if(b.dataset.link==='edit-timetable')showPeriodEditor(null);else if(b.dataset.link==='calendar'||b.dataset.link==='school-calendar')openCalendar();else openView(b.dataset.link);return;}
  if(b.id==='ntEditProfile'){showProfileEditor();return;}
  if(b.id==='ntChangePhoto'){$('#ntHiddenPhoto')?.click();return}
  if(b.id==='ntEditTimetable'){showPeriodEditor(null);return}
