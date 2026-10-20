@@ -96,7 +96,7 @@ async function render(){
  '<div class="nt-profile-grid">'+det('Employee ID:',details.employee_code,'▤')+det('Joining date:',formatDate(details.joined_on),'▣')+det('Date of birth:',formatDate(details.date_of_birth),'♧')+det('Qualification:',details.qualification,'◈')+
  det('Address:',details.address,'⌖')+det('Phone:',app.profile.mobile_number,'☎')+det('Email:',app.profile.email||app.user.email,'✉')+det('School:',app.school?.name||app.profile.school_name_submitted,'⌂')+'</div></div>'+
  '<aside class="nt-quote"><p>Teaching is shaping brighter tomorrows.</p></aside></section>'+
- '<div class="nt-columns"><div><section class="nt-card"><div class="nt-card-head"><div><span class="nt-icon">▣</span><h2>My Timetable</h2></div><button class="nt-btn" id="ntEditTimetable">✎ Edit Timetable</button></div>'+
+ '<div class="nt-columns"><div><section class="nt-card"><div class="nt-card-head"><div><span class="nt-icon">▣</span><h2>Teaching Periods</h2></div><button class="nt-btn" id="ntEditTimetable">✎ Edit Timetable</button></div>'+
  '<div class="nt-timeline">'+(approved.length?approved.map(x=>statusHTML(x,runByPeriod.get(x.id))).join(''):'<p class="nt-empty">No approved periods for today. Use Edit Timetable to request new periods.</p>')+'</div>'+
  '<div class="nt-review-requests">'+
  (pendingToday.length?'<p class="nt-muted"><b>Awaiting Principal approval:</b> '+pendingToday.map(x=>esc(x.subject_name)+' ('+esc(x.class_label)+')').join(' · ')+'</p>':'')+
@@ -120,9 +120,13 @@ async function render(){
  '<input id="ntHiddenPhoto" type="file" accept="image/jpeg,image/png,image/webp" hidden></div>';
  const readErrors=[extra.error,periods.error,runs.error,checkin.error,assignees.error,personal.error,notices.error,calendar.error,assignment.error,membership.error].filter(Boolean);
  if(readErrors.length){const warning=document.createElement('p');warning.className='nt-followup';warning.textContent='Some school records could not be loaded. Check your account permissions or connection and try again.';wrapper.querySelector('.noor-t4')?.prepend(warning);}
+ const dash=wrapper.querySelector('.noor-t4'),profileNode=dash?.querySelector('.nt-profile');
+ if(dash&&profileNode){const hub=document.createElement('section');hub.id='ntTeacherIntelligence';hub.setAttribute('aria-label','AI Teacher Command Centre');profileNode.insertAdjacentElement('afterend',hub);const attendance=dash.querySelector('.nt-attendance');if(attendance)hub.insertAdjacentElement('afterend',attendance);}
+ current.assignedTasks=assignedTasks;
  wrapper.onclick=onClick; // Replace handler on each render; avoid duplicate clicks/period submissions.
  $('#ntHiddenPhoto').onchange=uploadPhoto;
  window.NOOR_TEACHER_EMBED?.mount?.(current);
+ window.NOOR_TEACHER_INTELLIGENCE?.mount?.(current);
  setLive();
  }catch(err){console.error('NOOR Teacher Dashboard:',err);if(root())root().innerHTML='<div class="noor-t4"><div class="nt-card"><h2>Teacher workspace unavailable</h2><p>'+esc(err?.message||'Please try again.')+'</p><button class="nt-btn primary" id="ntReload">Retry</button></div></div>';const retry=$('#ntReload');if(retry)retry.onclick=render}
  finally{rendering=false}
@@ -269,10 +273,7 @@ function openPaper(){
  if(!document.getElementById('view-paper-generator')){const v=document.createElement('section');v.id='view-paper-generator';v.className='view';document.querySelector('#workspace .content')?.append(v);}
  openView('paper-generator');
 }
-async function openCalendar(){
- if(!document.getElementById('view-teacher-calendar')){const v=document.createElement('section');v.id='view-teacher-calendar';v.className='view';document.querySelector('#workspace .content')?.append(v);}
- openView('teacher-calendar');
-}
+async function openCalendar(){openView('school-calendar');}
 async function renderCalendar(){
  if(!isTeacher())return;let v=document.getElementById('view-teacher-calendar');if(!v)return;
  v.innerHTML='<div class="noor-t4"><div class="nt-head"><div><span class="nt-kicker">NOOR SCHOOL</span><h1>School Calendar</h1></div><button class="nt-btn" id="ntCalBack">← Dashboard</button></div><div class="nt-card"><h2>Upcoming school events</h2><div id="ntCalItems"><p class="nt-muted">Loading school events…</p></div></div></div>';
