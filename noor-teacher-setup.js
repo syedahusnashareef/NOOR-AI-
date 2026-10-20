@@ -47,13 +47,13 @@ async function refresh(){
  const app=A(),el=root(),id=app.schoolId;
  if(!el)return;
  const db=app.db;
- const [teachers,classes,sections,subjects,assignments]=await Promise.all([
+ const [teachers,classes,subjects,assignments]=await Promise.all([
   db.from('profiles').select('id,full_name').eq('school_id',id).eq('role','teacher').eq('status','active').order('full_name').limit(500),
   db.from('classes').select('id,name').eq('school_id',id).eq('is_active',true).order('sort_order').limit(200),
-  db.from('sections').select('id,class_id,name').eq('is_active',true).limit(500),
   db.from('subjects').select('id,class_id,name').eq('school_id',id).limit(500),
   db.from('teacher_assignments').select('id,teacher_id,class_id,section_id,subject_id,is_active').eq('school_id',id).eq('is_active',true).limit(500)
  ]);
+ const sections=classes.error||!classes.data?.length?{data:[],error:classes.error||null}:await db.from('sections').select('id,class_id,name').eq('is_active',true).in('class_id',classes.data.map(c=>c.id)).limit(500);
  const err=[teachers,classes,sections,subjects,assignments].find(x=>x.error)?.error;
  const feedback=el.querySelector('#ntsStatus');
  if(err){feedback.textContent='Could not load school assignments: '+err.message;return}
