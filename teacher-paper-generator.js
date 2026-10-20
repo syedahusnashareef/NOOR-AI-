@@ -44,6 +44,32 @@ function paperText(o){
 }
 function answerText(o){return (o?.answer_key||[]).map((x,i)=>{x=typeof x==='string'?{answer:x}:x||{};return (x.number||i+1)+'. '+String(x.answer||'Teacher review required')+(x.explanation?'\n'+x.explanation:'')}).join('\n\n')}
 function display(title,paper,answers){$('#ppTitle').value=title||'';$('#ppQuestions').value=paper||'';$('#ppAnswers').value=answers||'';$('#ppPreview').textContent=paper||'Generate a paper to preview.';$('#ppAnswerPreview').textContent=answers||'No answer key yet.'}
+
+async function loadPaperContexts(){
+ const app=a(),box=$('#ppContext');if(!box)return;
+ const r=await app.db.from('teacher_assignments').select('class_id,section_id,subject_id').eq('school_id',app.schoolId).eq('teacher_id',app.user.id).eq('is_active',true).limit(200);
+ if(r.error){status('Assigned classes unavailable: '+r.error.message);return}
+ if(!r.data?.length){box.innerHTML='<option value="">Ask Principal to assign your class first</option>';status('Official school assignment required before making a class paper.');return}
+ const classIds=[...new Set(r.data.map(x=>x.class_id))];
+ const [cl,se,su]=await Promise.all([
+  app.db.from('classes').select('id,name').eq('school_id',app.schoolId).eq('is_active',true).in('id',classIds),
+  app.db.from('sections').select('id,class_id,name').eq('is_active',true).in('class_id',classIds),
+  app.db.from('subjects').select('id,class_id,name').eq('school_id',app.schoolId)
+ ]);
+ if(cl.error||se.error||su.error){status('School classes unavailable: '+(cl.error||se.error||su.error).message);return}
+ const classes=new Map((cl.data||[]).map(x=>[x.id,x])),sections=se.data||[],subjects=su.data||[];
+ paperContexts=[];
+ for(const item of r.data){
+  const c=classes.get(item.class_id);if(!c)continue;
+  const allowed=item.section_id?sections.filter(x=>x.id===item.section_id):sections.filter(x=>x.class_id===item.class_id);
+  const subject=subjects.find(x=>x.id===item.subject_id);
+  for(const sec of allowed.length?allowed:[null]){
+   const ctx={class_id:c.id,class_name:c.name,section_id:sec?.id||null,section_name:sec?.name||'',subject_id:subject?.id||null,subject_name:subject?.name||''};
+   if(!paperContexts.some(x=>x.class_id===ctx.class_id&&x.section_id===ctx.section_id&&x.subject_id===ctx.subject_id))paperContexts.push(ctx);
+  }
+ }
+ box.innerHTML=paperContexts.map((x,i)=>'<option value="'+i+'">'+e(x.class_name)+(x.section_name?' — '+e(x.section_name):'')+(x.subject_name?' · '+e(x.subject_name):'')+'</option>').join('')||'<option value="">No active assigned classes</option>';
+}
 async function open(){
  if(!ready())return;
  v=document.getElementById('view-paper-generator');
@@ -52,6 +78,7 @@ async function open(){
  output=null;draftId=null;
  v.innerHTML='<div class="pp-head"><div><small style="letter-spacing:2px;color:#9d657a">NOOR · TEACHER STUDIO</small><h1>Assignments & Weekly Papers</h1><p class="pp-sub">Generate from a textbook photo or short description. Customize before printing.</p></div><button class="pp-btn soft" id="ppBack">← Dashboard</button></div>'+
  '<div class="pp-layout"><div><section class="pp-card"><h2>✦ Generate a paper</h2><form id="ppForm" class="pp-fields">'+
+  '<label class="wide">School Class & Section<select id="ppContext" required><option value="">Loading assigned school classes…</option></select></label>'+
  '<label>Paper type<select id="ppType">'+Object.entries(TYPE).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></label>'+
  '<label>Language<select id="ppLang">'+['English','Urdu','Hindi','Telugu','Arabic','Bilingual (English + Urdu)'].map(x=>'<option>'+x+'</option>').join('')+'</select></label>'+
  '<label>Number of questions<select id="ppCount">'+[5,8,10,15,20,25].map(x=>'<option '+(x===10?'selected':'')+'>'+x+'</option>').join('')+'</select></label>'+
@@ -70,20 +97,21 @@ async function open(){
  $('#ppQuestions').oninput=()=>$('#ppPreview').textContent=$('#ppQuestions').value;
  $('#ppAnswers').oninput=()=>$('#ppAnswerPreview').textContent=$('#ppAnswers').value;
  $('#ppSave').onclick=save;$('#ppPrint').onclick=print;
- await load();
+ await loadPaperContexts();await load();
 }
 async function generate(){
  if(waiting||!ready())return;
  waiting=true;$('#ppGenerate').disabled=true;status('Generating your questions and answer key…');
  try{
  const photos=Array.from($('#ppImages').files||[]),description=$('#ppDescription').value.trim(),topic=$('#ppTopic').value.trim();
+  const context=paperContexts[Number($('#ppContext').value)];if(!context)throw Error('Choose your assigned school class and section.');
  if(!photos.length&&!description&&!topic)throw Error('Choose a photo OR add a short description or topic.');
  if(photos.length>8)throw Error('Maximum eight images per request.');
  let total=0;for(const f of photos){if(!['image/jpeg','image/png','image/webp'].includes(f.type))throw Error('Use JPG, PNG or WebP photos.');if(f.size>4*1024*1024)throw Error('Each photo must be under 4 MB.');total+=f.size;}
  if(total>12*1024*1024)throw Error('Choose fewer or smaller photos.');
  const images=await Promise.all(photos.map(readFile));
  const req=await a().db.functions.invoke('noor-ai-academic-assistant',{body:{
- action:'paper',school_id:a().schoolId,topic,rough_text:description,images,
+ action:'paper',school_id:a().schoolId,topic,rough_text:description,images,...context,
  paper_type:$('#ppType').value,language:$('#ppLang').value,difficulty:$('#ppDifficulty').value,
  question_count:Number($('#ppCount').value),marks_per_question:Number($('#ppMarks').value)
  }});
@@ -97,8 +125,9 @@ async function generate(){
 async function save(){
  if(!ready())return;const paper=$('#ppQuestions').value.trim(),answer=$('#ppAnswers').value.trim();
  if(!paper)return status('Generate or enter questions before saving.');
+  const context=paperContexts[Number($('#ppContext').value)];if(!context)return status('Choose your assigned school class and section.');
  const title=$('#ppTitle').value.trim()||TYPE[$('#ppType').value],row={
- school_id:a().schoolId,teacher_id:a().user.id,title:title.slice(0,180),paper_type:$('#ppType').value,
+ school_id:a().schoolId,teacher_id:a().user.id,title:title.slice(0,180),paper_type:$('#ppType').value,class_id:context.class_id,section_id:context.section_id,subject_id:context.subject_id,
  language:$('#ppLang').value,source_description:$('#ppDescription').value.slice(0,10000),
  content:{...(output||{}),paper_text:paper,answer_key_text:answer,teacher_edited:true},updated_at:new Date().toISOString()
  };
@@ -136,11 +165,11 @@ async function print(){
 }
 async function load(){
  const box=$('#ppSaved');if(!box||!ready())return;
- const r=await a().db.from('noor_teacher_paper_drafts').select('id,title,content,language,paper_type,updated_at').eq('school_id',a().schoolId).eq('teacher_id',a().user.id).order('updated_at',{ascending:false}).limit(25);
+ const r=await a().db.from('noor_teacher_paper_drafts').select('id,title,content,language,paper_type,updated_at,class_id,section_id,subject_id').eq('school_id',a().schoolId).eq('teacher_id',a().user.id).order('updated_at',{ascending:false}).limit(25);
  if(r.error){box.textContent='Could not load drafts: '+r.error.message;return}
  const rows=r.data||[];
  box.innerHTML=rows.length?rows.map(x=>'<div><div><strong>'+e(x.title)+'</strong><small>'+e(TYPE[x.paper_type]||'Paper')+' · '+e(new Date(x.updated_at).toLocaleDateString('en-IN'))+'</small></div><button class="pp-btn soft" data-paper="'+e(x.id)+'">Edit</button></div>').join(''):'<p class="pp-sub">No saved papers yet.</p>';
- box.onclick=ev=>{const b=ev.target.closest('[data-paper]');if(!b)return;const item=rows.find(x=>x.id===b.dataset.paper);if(!item)return;draftId=item.id;output=item.content||{};$('#ppType').value=item.paper_type;$('#ppLang').value=item.language;display(item.title,item.content?.paper_text||paperText(item.content),item.content?.answer_key_text||answerText(item.content));status('Saved paper loaded for editing.');$('#ppQuestions').scrollIntoView({behavior:'smooth',block:'center'})};
+ box.onclick=ev=>{const b=ev.target.closest('[data-paper]');if(!b)return;const item=rows.find(x=>x.id===b.dataset.paper);if(!item)return;draftId=item.id;output=item.content||{};$('#ppType').value=item.paper_type;$('#ppLang').value=item.language;const i=paperContexts.findIndex(x=>x.class_id===item.class_id&&x.section_id===(item.section_id||null)&&x.subject_id===(item.subject_id||null));if(i>=0)$('#ppContext').value=String(i);display(item.title,item.content?.paper_text||paperText(item.content),item.content?.answer_key_text||answerText(item.content));status('Saved paper loaded for editing.');$('#ppQuestions').scrollIntoView({behavior:'smooth',block:'center'})};
 }
 window.NOOR_PAPER_GENERATOR={open};
 })();
