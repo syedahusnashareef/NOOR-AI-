@@ -120,7 +120,7 @@ async function render(){
  '<input id="ntHiddenPhoto" type="file" accept="image/jpeg,image/png,image/webp" hidden></div>';
  const readErrors=[extra.error,periods.error,runs.error,checkin.error,assignees.error,personal.error,notices.error,calendar.error,assignment.error,membership.error].filter(Boolean);
  if(readErrors.length){const warning=document.createElement('p');warning.className='nt-followup';warning.textContent='Some school records could not be loaded. Check your account permissions or connection and try again.';wrapper.querySelector('.noor-t4')?.prepend(warning);}
- wrapper.addEventListener('click',onClick,{once:false});
+ wrapper.onclick=onClick; // Replace handler on each render; avoid duplicate clicks/period submissions.
  $('#ntHiddenPhoto').onchange=uploadPhoto;
  window.NOOR_TEACHER_EMBED?.mount?.(current);
  setLive();
