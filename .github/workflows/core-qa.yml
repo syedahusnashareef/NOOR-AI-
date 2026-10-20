@@ -17,6 +17,8 @@ jobs:
           node --check teacher-reference.js
           node --check teacher-attendance.js
           node --check command-centre.js
+          node --check noor-parent-support.js
+          node --check scripts/noor-reliability-smoke.mjs
           node --check scripts/principal-studio-smoke.mjs
       - name: Verify live site uses real dashboard assets
         run: |
@@ -32,3 +34,7 @@ jobs:
         run: |
           python3 -m http.server 8060 >/tmp/noor-http.log 2>&1 &
           SITE_URL=http://127.0.0.1:8060/ node scripts/principal-studio-smoke.mjs
+      - name: Validate atomic attendance, academic contracts, mobile, and parent support
+        run: |
+          python3 -m http.server 8061 >/tmp/noor-http-reliability.log 2>&1 &
+          SITE_URL=http://127.0.0.1:8061/ node scripts/noor-reliability-smoke.mjs
