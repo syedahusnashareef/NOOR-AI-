@@ -83,6 +83,8 @@ async function render(){
  const currentPeriod=approved.find(x=>runByPeriod.get(x.id)?.status==='ongoing')||approved.find(x=>fmt(x.start_time)<=now&&fmt(x.end_time)>now);
  const name=app.profile.full_name||'Teacher',initials=name.split(/\s+/).slice(0,2).map(v=>v[0]||'').join('').toUpperCase();
  current={details,periods:allPeriods,runs:allRuns,checkin:checkin.data,assignments:assignment.data||[],notices:validNotices,events,avatar};
+ const pendingToday=allPeriods.filter(x=>x.weekday===weekday&&x.approval_status==='pending');
+ const rejectedToday=allPeriods.filter(x=>x.weekday===weekday&&x.approval_status==='rejected');
  const staff=checkin.data?.status==='present';
  const taskStatus=new Map((assignees.data||[]).map(x=>[x.task_id,x.status]));
  const activities=logActivity(allRuns,approved,checkin.data,validNotices);
@@ -95,7 +97,11 @@ async function render(){
  det('Address:',details.address,'⌖')+det('Phone:',app.profile.mobile_number,'☎')+det('Email:',app.profile.email||app.user.email,'✉')+det('School:',app.school?.name||app.profile.school_name_submitted,'⌂')+'</div></div>'+
  '<aside class="nt-quote"><p>Teaching is shaping brighter tomorrows.</p></aside></section>'+
  '<div class="nt-columns"><div><section class="nt-card"><div class="nt-card-head"><div><span class="nt-icon">▣</span><h2>My Timetable</h2></div><button class="nt-btn" id="ntEditTimetable">✎ Edit Timetable</button></div>'+
- '<div class="nt-timeline">'+(approved.length?approved.map(x=>statusHTML(x,runByPeriod.get(x.id))).join(''):'<p class="nt-empty">No periods for today. Add your own periods using Edit Timetable.</p>')+'</div>'+
+ '<div class="nt-timeline">'+(approved.length?approved.map(x=>statusHTML(x,runByPeriod.get(x.id))).join(''):'<p class="nt-empty">No approved periods for today. Use Edit Timetable to request new periods.</p>')+'</div>'+
+ '<div class="nt-review-requests">'+
+ (pendingToday.length?'<p class="nt-muted"><b>Awaiting Principal approval:</b> '+pendingToday.map(x=>esc(x.subject_name)+' ('+esc(x.class_label)+')').join(' · ')+'</p>':'')+
+ (rejectedToday.length?'<p class="nt-muted"><b>Requests to revise:</b> '+rejectedToday.map(x=>esc(x.subject_name)+' ('+esc(x.class_label)+')').join(' · ')+'</p>':'')+
+ '</div>'+
  '<div class="nt-progress" title="Today\'s completed classes"><span style="width:'+(approved.length?Math.round(complete/approved.length*100):0)+'%"></span></div>'+
  '<p class="nt-muted" style="margin:8px 0 0">'+complete+' of '+approved.length+' periods completed today</p>'+
  '<div class="nt-timeline-footer">◉ Class completion is saved to school records and visible in the Principal Dashboard.</div></section></div>'+
