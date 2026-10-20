@@ -22,6 +22,7 @@ async function readAll(){
  const jobs={
   classes:db().from('classes').select('id,name').eq('school_id',school).eq('is_active',true),
   sections:db().from('sections').select('id,name,class_id').eq('class_id',me.class_id||'00000000-0000-0000-0000-000000000000'),
+  periods:db().from('noor_teacher_periods').select('id,weekday,period_number,start_time,end_time,subject_name,class_label,block_type,section_id,approval_status').eq('school_id',school).eq('class_id',me.class_id||'00000000-0000-0000-0000-000000000000').eq('approval_status','approved').order('weekday').order('start_time'),
   subjects:db().from('subjects').select('id,name,class_id').eq('school_id',school),
   notes:db().from('smart_notes').select('id,title,content,subject_id,updated_at,teacher_id').eq('school_id',school).eq('class_id',me.class_id||'00000000-0000-0000-0000-000000000000').eq('status','published').eq('published_to_students',true).order('updated_at',{ascending:false}).limit(150),
   notices:db().from('school_notices').select('id,title,body,starts_at,ends_at,created_at').eq('school_id',school).eq('is_active',true).contains('target_roles',['student']).order('starts_at',{ascending:false}).limit(100),
@@ -45,7 +46,7 @@ async function readAll(){
  data.assignments=data.assignments.filter(x=>!x.section_id||x.section_id===sectionId);
  data.assessments=data.assessments.filter(x=>!x.section_id||x.section_id===sectionId);
  data.marks=data.results.map(r=>{const a=data.assessments.find(x=>x.id===r.assessment_id && x.status!=='planned');return a?{...r,assessment:a,pct:N(a.max_marks)>0?100*N(r.marks_obtained)/N(a.max_marks):null}:null}).filter(Boolean).sort((a,b)=>new Date(a.assessment.assessment_date)-new Date(b.assessment.assessment_date));
- data.exams=data.assessments.filter(x=>x.status==='planned'&&x.assessment_date>=isoDay(new Date()));const reviewedHomework=data.submissions.filter(x=>x.status==='reviewed'&&x.marks_obtained!=null).map(x=>{const asg=data.assignments.find(a=>a.id===x.assignment_id);if(!asg||!N(asg.max_marks))return null;return {marks_obtained:x.marks_obtained,teacher_feedback:x.teacher_feedback,assessment:{id:asg.id,title:asg.title,subject_id:asg.subject_id,assessment_type:'homework',assessment_date:(x.reviewed_at||x.submitted_at).slice(0,10),max_marks:asg.max_marks},pct:100*N(x.marks_obtained)/N(asg.max_marks)};}).filter(Boolean);data.marks=data.marks.concat(reviewedHomework).sort((a,b)=>new Date(a.assessment.assessment_date)-new Date(b.assessment.assessment_date));data.recordDays=data.attendance.map(r=>{const s=data.sessions.find(s=>s.id===r.session_id);return s?{day:s.attendance_date,status:r.status}:null}).filter(Boolean);
+ data.periods=data.periods.filter(x=>!x.section_id||x.section_id===sectionId);data.exams=data.assessments.filter(x=>x.status==='planned'&&x.assessment_date>=isoDay(new Date()));const reviewedHomework=data.submissions.filter(x=>x.status==='reviewed'&&x.marks_obtained!=null).map(x=>{const asg=data.assignments.find(a=>a.id===x.assignment_id);if(!asg||!N(asg.max_marks))return null;return {marks_obtained:x.marks_obtained,teacher_feedback:x.teacher_feedback,assessment:{id:asg.id,title:asg.title,subject_id:asg.subject_id,assessment_type:'homework',assessment_date:(x.reviewed_at||x.submitted_at).slice(0,10),max_marks:asg.max_marks},pct:100*N(x.marks_obtained)/N(asg.max_marks)};}).filter(Boolean);data.marks=data.marks.concat(reviewedHomework).sort((a,b)=>new Date(a.assessment.assessment_date)-new Date(b.assessment.assessment_date));data.recordDays=data.attendance.map(r=>{const s=data.sessions.find(s=>s.id===r.session_id);return s?{day:s.attendance_date,status:r.status}:null}).filter(Boolean);
 }
 const subject=id=>data.subjects?.find(s=>s.id===id)?.name||'General subject';
 const eligible=()=>data.marks||[];
@@ -85,8 +86,8 @@ function overview(){
  const mini=box('My Classroom','Latest teacher-published learning material','<div class="sp-list">'+recentNotes+'</div>',btn('Learning','student-learning'));
  const graph=box('Academic Performance','Actual school-assessed marks only',barsMarkup(m),btn('Progress','student-progress'));
  const due=box('Homework & Deadlines','Tasks requiring your response','<div class="sp-list">'+next+'</div>',btn('All tasks','student-homework'));
- const exbox=box('Upcoming Exams','Countdown to school-planned assessments',examNext.length?'<div class="sp-list">'+examNext.map(x=>item(x.title,subject(x.subject_id)+' · '+date(x.assessment_date)+' · '+Math.max(0,Math.ceil((new Date(x.assessment_date+'T23:59:59')-new Date())/86400000))+' day(s) left')).join('')+'</div>':empty('No upcoming school exams have been scheduled yet.'));const nbox=box('Latest School Notices','Relevant authorised announcements','<div class="sp-list">'+recentNotice+'</div>',btn('All notices','notices'));
- root().innerHTML='<div class="sp-root">'+header+kp+alertErrors()+'<div class="sp-grid">'+miniCalendar()+mini+'</div><div class="sp-grid">'+graph+due+'</div>'+exbox+nbox+'</div>';
+ const exbox=box('Upcoming Exams','Countdown to school-planned assessments',examNext.length?'<div class="sp-list">'+examNext.map(x=>item(x.title,subject(x.subject_id)+' · '+date(x.assessment_date)+' · '+Math.max(0,Math.ceil((new Date(x.assessment_date+'T23:59:59')-new Date())/86400000))+' day(s) left')).join('')+'</div>':empty('No upcoming school exams have been scheduled yet.'));const daily=box('My Daily Schedule','Today’s approved class periods',scheduleRows(new Date().getDay()),btn('All periods','student-schedule'));const nbox=box('Latest School Notices','Relevant authorised announcements','<div class="sp-list">'+recentNotice+'</div>',btn('All notices','notices'));
+ root().innerHTML='<div class="sp-root">'+header+kp+alertErrors()+'<div class="sp-grid">'+miniCalendar()+mini+'</div><div class="sp-grid">'+graph+due+'</div>'+daily+exbox+nbox+'</div>';
  document.body.classList.add('noor-student-mode');
 }
 function barsMarkup(marks){const groups={};marks.forEach(x=>{const k=subject(x.assessment.subject_id);(groups[k]??=[]).push(x.pct)});
@@ -109,6 +110,16 @@ function weekTrend(){
 function topicBars(m){
  if(!m.length)return empty('No marked assessments available.');
  return m.slice(-12).reverse().map((x,i)=>'<div class="sp-bar-row"><b title="'+E(x.assessment.title)+'">'+E(x.assessment.title.slice(0,29))+'</b><div class="sp-bar-track"><div class="sp-bar-fill '+['pink','blue','mint','lilac','peach'][i%5]+'" style="width:'+Math.max(0,Math.min(100,x.pct||0))+'%"></div></div><strong>'+Math.round(x.pct||0)+'%</strong></div>').join('');
+}
+
+function scheduleRows(weekday){
+ const rows=(data.periods||[]).filter(x=>x.weekday===weekday).sort((a,b)=>a.start_time.localeCompare(b.start_time));
+ return rows.length?'<div class="sp-list">'+rows.map(x=>item('Period '+x.period_number+' · '+(x.subject_name||'Subject'),(x.start_time||'').slice(0,5)+'–'+(x.end_time||'').slice(0,5)+' · '+(x.block_type||'Class'))).join('')+'</div>':empty('No approved periods recorded for this day.');
+}
+function schedule(){
+ const days=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+ renderShell('student-schedule','My Daily Schedule','Approved periods from teachers assigned to your class/section. No fictional timetable.',
+ '<div class="sp-grid equal">'+days.map((x,i)=>box(x,i===new Date().getDay()?'Today':'Weekly timetable',scheduleRows(i))).join('')+'</div>');
 }
 function studentNotices(){
  const list=notices();renderShell('notices','Teacher & School Notices','Published notices for your authorised school, class and section.',
@@ -199,7 +210,7 @@ async function profile(){
  renderShell('profile','My Student Profile','Your authorised school identity and personal details. Home address is private.','<div class="sp-intro"><div><span class="sp-kicker">STUDENT IDENTITY</span><h1>'+E(q.full_name)+'</h1><p class="sp-muted">'+E(classText())+' · '+E(sectionText())+'</p>'+badge('Roll '+(q.roll_number||'Unassigned'))+'</div><div class="sp-avatar">'+avatar+'</div></div><div class="sp-grid">'+box('My Details','School records are read-only',details)+box('Edit My Contact Details','Only approved personal fields can be updated',form)+'</div>');
 }
 async function run(id){
- if(!mine())return;const routes={'student-learning':learning,'student-calendar':calendar,'student-progress':progress,'student-attendance':attendance,'student-homework':homework,'student-planner':planner,'student-questions':questions,'student-portfolio':portfolio,'profile':profile,'notices':studentNotices,'notifications':studentNotifications};if(routes[id])await routes[id]();
+ if(!mine())return;const routes={'student-learning':learning,'student-calendar':calendar,'student-progress':progress,'student-attendance':attendance,'student-homework':homework,'student-planner':planner,'student-questions':questions,'student-portfolio':portfolio,'student-schedule':schedule,'profile':profile,'notices':studentNotices,'notifications':studentNotifications};if(routes[id])await routes[id]();
 }
 
 function connectLive(){
