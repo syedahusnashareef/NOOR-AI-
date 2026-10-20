@@ -124,9 +124,10 @@ async function render(){
 
  // Reference-accurate Teacher Dashboard: all figures from scoped school records, no placeholder metrics.
  const hero=document.createElement('div');hero.className='nt-reference-kpis';
- const classContexts=[...new Map(approved.map(p=>[(p.class_id||p.class_label||'')+':'+(p.section_id||''),p])).values()];
+ const weeklyApproved=allPeriods.filter(p=>p.approval_status==='approved');
+ const classContexts=[...new Map(weeklyApproved.map(p=>[(p.class_id||p.class_label||'')+':'+(p.section_id||''),p])).values()];
  const classTitle=classContexts.length===1?(classContexts[0].class_label||'Assigned class'):classContexts.length?classContexts.length+' assigned classes':'No assigned class';
- const sectionTitle=classContexts.length===1?(classContexts[0].section_id?'Assigned section':'School section'):classContexts.length?'Multiple sections':'Not assigned';
+ const sectionTitle=classContexts.length===1?(classContexts[0].section_id?'Assigned section':'Not assigned'):classContexts.length?'Multiple sections':'Not assigned';
  hero.innerHTML='<div class="nt-reference-greeting"><span>Welcome back,</span> <strong>'+esc(name)+'</strong></div>'+
  '<div class="nt-reference-kpi-grid"><div class="nt-reference-kpi purple"><span>♧</span><div><small>Class</small><b>'+esc(classTitle)+'</b></div></div>'+
  '<div class="nt-reference-kpi pink"><span>♟</span><div><small>Section</small><b>'+esc(sectionTitle)+'</b></div></div>'+
