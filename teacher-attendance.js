@@ -101,30 +101,25 @@ async function load(){
 }
 async function save(){
  if(st.busy)return;
- const a=api(),t=tally(),class_id=$('#taClass').value,section_id=$('#taSection').value||null,attendance_date=$('#taDate').value;
+ const current=api(),t=tally(),class_id=$('#taClass').value,section_id=$('#taSection').value||null,attendance_date=$('#taDate').value;
  if(!st.students.length||t.missing)return say('Mark Present / Absent / Late for every student.',true);
- st.busy=true;refreshTotals();say('Saving '+st.students.length+' attendance marks…');
+ st.busy=true;refreshTotals();say('Saving '+st.students.length+' attendance marks as one transaction…');
  try{
-  let session=st.session;
-  if(!session){
-   const r=await a.db.from('attendance_sessions').insert({school_id:a.schoolId,class_id,section_id,attendance_date,status:'draft',taken_by:a.user.id}).select('id,status').single();
-   if(r.error?.code==='23505'){
-      let query=a.db.from('attendance_sessions').select('id,status').eq('school_id',a.schoolId).eq('class_id',class_id).eq('attendance_date',attendance_date);
-      query=section_id?query.eq('section_id',section_id):query.is('section_id',null);
-      const found=await query.single();if(found.error)throw found.error;session=found.data;
-   }else{if(r.error)throw r.error;session=r.data;}
-  }
-  const rows=st.students.map(x=>({school_id:a.schoolId,session_id:session.id,student_id:x.id,status:st.marks[x.id],marked_by:a.user.id,marked_at:new Date().toISOString()}));
-  const result=await a.db.from('attendance_records').upsert(rows,{onConflict:'session_id,student_id'});
+  const marks=st.students.map(student=>({student_id:student.id,status:st.marks[student.id]}));
+  const result=await current.db.rpc('noor_submit_attendance_atomic',{
+   p_school_id:current.schoolId,p_class_id:class_id,p_section_id:section_id,
+   p_attendance_date:attendance_date,p_marks:marks
+  });
   if(result.error)throw result.error;
-  const finish=await a.db.from('attendance_sessions').update({status:'submitted',submitted_at:new Date().toISOString()}).eq('school_id',a.schoolId).eq('id',session.id);
-  if(finish.error)throw finish.error;
-  st.session={id:session.id,status:'submitted'};
-  $('#taDayInfo').textContent=st.students.length+' students • '+attendance_date+' • submitted';
-  say('✓ Submitted: '+t.p+' Present · '+t.a+' Absent · '+t.l+' Late');a.toast?.('Attendance saved to school records.','success');
-  await alerts(st.version);
- }catch(e){say('Attendance not fully submitted: '+(e?.message||'Unknown error'),true)}
- finally{st.busy=false;refreshTotals()}
+  if(!result.data?.session_id||Number(result.data.saved)!==st.students.length)throw new Error('Server did not confirm the entire class was saved.');
+  st.session={id:result.data.session_id,status:result.data.status};
+  $('#taDayInfo').textContent=st.students.length+' students • '+attendance_date+' • '+result.data.status;
+  say('✓ All '+result.data.saved+' marks saved together: '+t.p+' Present · '+t.a+' Absent · '+t.l+' Late');
+  current.toast?.('Complete attendance saved securely.','success');
+  try{await alerts(st.version)}catch(err){console.warn('Attendance saved, but alerts could not refresh',err)}
+ }catch(err){
+  say('Nothing partially submitted. '+(err?.message||'Attendance could not be saved.')+' Check connection and retry.',true);
+ }finally{st.busy=false;refreshTotals()}
 }
 async function alerts(version){
  const a=api(),c=$('#taClass')?.value,section=$('#taSection')?.value||null;
