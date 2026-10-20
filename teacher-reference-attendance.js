@@ -47,14 +47,14 @@ async function mount(){
  box.innerHTML='<div class="nt-att-head"><div class="nt-att-controls"><label>Date<input id="ntAttDate" type="date" max="'+day()+'" value="'+day()+'"></label><label>Class<select id="ntAttClass"></select></label><label>Section<select id="ntAttSection"></select></label></div><div class="nt-att-summary" id="ntAttSummary"><span class="nt-att-chip unmarked">Loading…</span></div></div>'+
  '<div class="nt-att-scroll" id="ntAttTable"><p class="nt-muted">Loading real class roster…</p></div>'+
  '<div class="nt-att-actions"><div><button class="nt-btn" type="button" id="ntAttMarkAll">✓ Mark all Present</button><span class="nt-muted" style="margin-left:8px">Review before saving.</span></div><button class="nt-btn primary" type="button" id="ntAttSave" disabled>Save Attendance →</button></div>'+
- '<p class="nt-muted" id="ntAttFooter"></p><p class="nt-muted" role="status" id="ntAttStatus"></p><div id="ntAttRisk"></div>';
+ '<div class="nt-offline-bar"><span>◷ Offline: draft stays on this device until synced.</span><button type="button" class="nt-btn" id="ntAttSync">Sync pending drafts</button></div><p class="nt-muted" id="ntAttOfflineStatus" role="status"></p>'+ '<p class="nt-muted" id="ntAttFooter"></p><p class="nt-muted" role="status" id="ntAttStatus"></p><div id="ntAttRisk"></div>';
  $('#ntAttDate').onchange=loadRoster;$('#ntAttClass').onchange=()=>{sectionOptions();loadRoster()};$('#ntAttSection').onchange=loadRoster;
  $('#ntAttTable').addEventListener('click',ev=>{const b=ev.target.closest('[data-student][data-choice]');if(!b||!model.students.some(x=>x.id===b.dataset.student))return;
  model.selection[b.dataset.student]=b.dataset.choice;
  const row=b.closest('tr');row.querySelectorAll('[data-choice]').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.choice===b.dataset.choice)));stats();
  });
  $('#ntAttMarkAll').onclick=()=>{for(const x of model.students)model.selection[x.id]='present';table();say('Everyone marked Present. Check before saving.')};
- $('#ntAttSave').onclick=save;
+ $('#ntAttSave').onclick=save;$('#ntAttSync').onclick=syncPending;refreshPending();
  const db=a.db;
  const assignment=await db.from('teacher_assignments').select('class_id,section_id').eq('school_id',a.schoolId).eq('teacher_id',a.user.id).eq('is_active',true).limit(200);
  if(v!==revision||!root())return;
@@ -97,6 +97,16 @@ async function loadRoster(){
  }
  table();checkAbsences(instance);
 }
+async function refreshPending(){
+ try{const rows=await window.NOOR_OFFLINE_ATTENDANCE?.all?.()||[];if($('#ntAttOfflineStatus'))$('#ntAttOfflineStatus').textContent=rows.length?rows.length+' draft(s) NOT yet sent to Principal.':'No unsynced attendance drafts.';}
+ catch(e){if($('#ntAttOfflineStatus'))$('#ntAttOfflineStatus').textContent='Offline storage unavailable: '+e.message}
+}
+async function syncPending(){
+ const b=$('#ntAttSync');if(!b)return;b.disabled=true;say('Checking login, syncing drafts to school…');
+ try{const results=await window.NOOR_OFFLINE_ATTENDANCE.sync(),bad=results.filter(x=>!x.ok);
+ say(bad.length?'Synced '+(results.length-bad.length)+'; '+bad.length+' need correction: '+bad[0].error:results.length?'✓ '+results.length+' draft(s) synced to Principal.':'No pending drafts.',!!bad.length);await refreshPending();}
+ catch(e){say('Sync failed: '+e.message,true)}finally{b.disabled=false}
+}
 async function save(){
  if(working||!model?.students.length)return;
  const n=marks();
@@ -104,12 +114,20 @@ async function save(){
  const a=APP(),db=a.db,classId=$('#ntAttClass').value,sectionId=$('#ntAttSection').value||null,attendance_date=$('#ntAttDate').value,m=model;
  working=true;stats();say('Saving attendance securely…');
  try{
- const result=await db.rpc('noor_submit_class_attendance',{p_school_id:a.schoolId,p_class_id:classId,p_section_id:sectionId,p_attendance_date:attendance_date,p_marks:m.students.map(x=>({student_id:x.id,status:m.selection[x.id]}))});
+ const request={class_id:classId,section_id:sectionId,attendance_date,marks:m.students.map(x=>({student_id:x.id,status:m.selection[x.id]}))};
+ if(navigator.onLine===false){await window.NOOR_OFFLINE_ATTENDANCE.queue(request);say('◷ Saved on THIS DEVICE only. NOT sent to Principal. Tap Sync when online.');await refreshPending();return;}
+ const result=await db.rpc('noor_submit_class_attendance',{p_school_id:a.schoolId,p_class_id:classId,p_section_id:sectionId,p_attendance_date:attendance_date,p_marks:request.marks});
  if(result.error)throw result.error;
  if(!result.data?.session_id||Number(result.data.count)!==m.students.length)throw Error('The database did not confirm the complete roster.');
+ await window.NOOR_OFFLINE_ATTENDANCE?.discard?.(request).catch(()=>{});await refreshPending();
  m.session={id:result.data.session_id,status:result.data.status};say('✓ Saved '+n.present+' Present, '+n.absent+' Absent and '+n.late+' Late to school records.');a.toast?.('Student attendance submitted.','success');
  await checkAbsences(revision);
- }catch(err){say('Attendance not fully submitted: '+(err.message||'Retry after checking permissions.'),true)}
+ }catch(err){
+ if(window.NOOR_OFFLINE_ATTENDANCE?.isNetworkFailure?.(err)){
+  try{await window.NOOR_OFFLINE_ATTENDANCE.queue({class_id:classId,section_id:sectionId,attendance_date,marks:m.students.map(x=>({student_id:x.id,status:m.selection[x.id]}))});say('Offline draft saved on device only. Principal has NOT received it.');await refreshPending();}
+  catch(storageError){say('Not saved to server OR device: '+storageError.message,true)}
+ }else say('Attendance NOT submitted: '+(err.message||'Retry after checking permissions.'),true);
+}
  finally{working=false;stats()}
 }
 async function checkAbsences(instance){
