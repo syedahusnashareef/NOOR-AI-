@@ -36,9 +36,20 @@ function sectionOptions(){
 function table(){
  const box=$('#ntAttTable'),students=model.students;
  if(!students.length){box.innerHTML='<p class="nt-empty">No active students found for this class and section.</p>';stats();return}
- box.innerHTML='<table class="nt-att-table"><thead><tr><th>Student Name</th><th>Roll No.</th><th style="text-align:center">Present</th><th style="text-align:center">Absent</th><th style="text-align:center">Late</th></tr></thead><tbody>'+
- students.map(x=>'<tr><td><b>'+E(x.full_name)+'</b></td><td>'+E(x.roll_number||'—')+'</td>'+
- ['present','absent','late'].map(status=>'<td style="text-align:center"><button type="button" class="nt-radio '+status+'" role="radio" aria-label="'+E(x.full_name)+' '+status+'" aria-checked="'+String(model.selection[x.id]===status)+'" data-student="'+E(x.id)+'" data-choice="'+status+'"></button></td>').join('')+'</tr>').join('')+'</tbody></table>';
+ const mobile=window.matchMedia?.('(max-width:760px)').matches||document.getElementById('workspace')?.classList.contains('noor-teacher-handset');
+ const options=x=>['present','absent','late'].map(status=>
+ '<button type="button" class="nt-radio '+status+'" role="radio" aria-label="'+E(x.full_name)+' '+status+
+ '" aria-checked="'+String(model.selection[x.id]===status)+'" data-student="'+E(x.id)+'" data-choice="'+status+'">'+
+ (mobile?{present:'✓ Present',absent:'✕ Absent',late:'◷ Late'}[status]:'')+'</button>').join('');
+ if(mobile){
+  box.innerHTML='<div class="nt-att-mobile-list">'+students.map(x=>
+   '<article class="nt-att-mobile-row" data-att-student="'+E(x.id)+'"><div class="nt-att-mobile-name"><b>'+E(x.full_name)+'</b><small>Roll No. '+E(x.roll_number||'Not assigned')+'</small></div>'+
+   '<div class="nt-att-mobile-options" role="group" aria-label="Mark attendance for '+E(x.full_name)+'">'+options(x)+'</div></article>').join('')+'</div>';
+ }else{
+  box.innerHTML='<table class="nt-att-table"><thead><tr><th>Student Name</th><th>Roll No.</th><th style="text-align:center">Present</th><th style="text-align:center">Absent</th><th style="text-align:center">Late</th></tr></thead><tbody>'+
+  students.map(x=>'<tr><td><b>'+E(x.full_name)+'</b></td><td>'+E(x.roll_number||'—')+'</td>'+
+  ['present','absent','late'].map(status=>'<td style="text-align:center"><button type="button" class="nt-radio '+status+'" role="radio" aria-label="'+E(x.full_name)+' '+status+'" aria-checked="'+String(model.selection[x.id]===status)+'" data-student="'+E(x.id)+'" data-choice="'+status+'"></button></td>').join('')+'</tr>').join('')+'</tbody></table>';
+ }
  stats();
 }
 async function mount(){
@@ -51,7 +62,7 @@ async function mount(){
  $('#ntAttDate').onchange=loadRoster;$('#ntAttClass').onchange=()=>{sectionOptions();loadRoster()};$('#ntAttSection').onchange=loadRoster;
  $('#ntAttTable').addEventListener('click',ev=>{const b=ev.target.closest('[data-student][data-choice]');if(!b||!model.students.some(x=>x.id===b.dataset.student))return;
  model.selection[b.dataset.student]=b.dataset.choice;
- const row=b.closest('tr');row.querySelectorAll('[data-choice]').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.choice===b.dataset.choice)));stats();
+ const row=b.closest('tr')||b.closest('.nt-att-mobile-row');row?.querySelectorAll('[data-choice]').forEach(x=>x.setAttribute('aria-checked',String(x.dataset.choice===b.dataset.choice)));stats();
  });
  $('#ntAttMarkAll').onclick=()=>{for(const x of model.students)model.selection[x.id]='present';table();say('Everyone marked Present. Check before saving.')};
  $('#ntAttSave').onclick=save;$('#ntAttSync').onclick=syncPending;refreshPending();
