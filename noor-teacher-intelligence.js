@@ -154,10 +154,20 @@ function editLesson(periodId){
  '<label>Topic taught<input name="topic" required maxlength="200" minlength="2" value="'+E(saved?.topic||'')+'" placeholder="What did you teach?"></label>'+
  '<label>Homework / practice<textarea name="homework" maxlength="2500" placeholder="Optional homework">'+E(saved?.homework||'')+'</textarea></label>'+
  '<label>Exit ticket question<textarea name="exit_ticket" maxlength="1500" placeholder="One question to check understanding">'+E(saved?.exit_ticket||'')+'</textarea></label>'+
- '<label>Teacher notes<textarea name="reflection" maxlength="2500" placeholder="What should be reviewed next lesson?">'+E(saved?.reflection||'')+'</textarea></label>'+
+ '<label>Teacher notes<textarea name="reflection" maxlength="2500" placeholder="What should be reviewed next lesson?">'+E(saved?.reflection||'')+'</textarea></label>'+ '<div class="nti-modal-actions"><select name="voiceLang" aria-label="Speech language"><option value="en-IN">English</option><option value="hi-IN">Hindi</option><option value="te-IN">Telugu</option><option value="ur-PK">Urdu</option></select><button type="button" id="ntiVoice">🎙 Dictate topic</button></div>'+ '<p class="nti-help">Optional browser speech recognition. Audio processing depends on your browser; NOOR does not store an audio recording.</p>'+ '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="publishExit" style="width:auto" /> Publish exit question as a 1-mark assignment after saving (requires approved class link)</label>'+
  '<p id="ntiLessonStatus" role="status"></p><div class="nti-modal-actions"><button type="submit" value="cancel">Cancel</button><button type="button" class="nti-primary" id="ntiSaveLesson">Save lesson</button></div></form>';
  document.body.append(d);d.showModal?.();if(!d.open)d.setAttribute('open','');
  d.addEventListener('close',()=>d.remove(),{once:true});
+ $('#ntiVoice',d).onclick=()=>{
+  const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SpeechRecognition){$('#ntiLessonStatus',d).textContent='Voice dictation is not supported on this browser. Use the text field.';return}
+  const rec=new SpeechRecognition();rec.lang=$('[name="voiceLang"]',d).value;rec.interimResults=false;rec.maxAlternatives=1;
+  $('#ntiLessonStatus',d).textContent='Microphone permission is requested by your browser. Speak your topic.';
+  rec.onresult=e=>{const words=e.results?.[0]?.[0]?.transcript||'';const input=$('[name="topic"]',d);input.value=(input.value+' '+words).trim().slice(0,200);$('#ntiLessonStatus',d).textContent='Dictation added. Review and save.'};
+  rec.onerror=e=>{$('#ntiLessonStatus',d).textContent='Dictation unavailable: '+e.error};
+  try{rec.start()}catch(err){$('#ntiLessonStatus',d).textContent=err.message}
+  d.addEventListener('close',()=>{try{rec.abort()}catch{}},{once:true});
+ };
  $('#ntiSaveLesson',d).onclick=async()=>{
   const form=$('form',d),v=x=>String(form.elements[x]?.value||'').trim(),topic=v('topic');if(topic.length<2)return $('#ntiLessonStatus',d).textContent='Topic needs at least 2 characters.';
   const app=A(),row={topic,homework:v('homework')||null,exit_ticket:v('exit_ticket')||null,reflection:v('reflection')||null},button=$('#ntiSaveLesson',d);
@@ -166,6 +176,14 @@ function editLesson(periodId){
    app.db.from('noor_teacher_lesson_logs').insert({...row,teacher_id:app.user.id,school_id:app.schoolId,period_id:p.id,class_date:data.day});
   const res=await query;
   if(res.error){$('#ntiLessonStatus',d).textContent=res.error.message;button.disabled=false;return;}
+  const publish=f.elements.publishExit.checked,exitTicket=v('exit_ticket');
+  if(publish&&exitTicket){
+   if(!p.class_id){$('#ntiLessonStatus',d).textContent='Lesson saved, but this period has no official class link. Principal must assign it before publishing.';button.disabled=false;return}
+   const due=new Date(new Date(data.day+'T12:00:00+05:30').getTime()+48*3600*1000).toISOString();
+   try{await window.NOOR_ASSIGNMENT_PORTAL?.publish?.({title:'Exit Ticket: '+topic,body:exitTicket,
+    context:{class_id:p.class_id,section_id:p.section_id,subject_id:p.subject_id},due_at:due,max_marks:1})}
+   catch(err){$('#ntiLessonStatus',d).textContent='Lesson saved; exit ticket could not be published: '+err.message;button.disabled=false;return}
+  }
   d.close();app.toast?.('Lesson diary saved to school records.','success');await mount(data.ctx);
  };
 }
