@@ -196,3 +196,26 @@
 #workspace.noor-teacher-handset .noor-t4 .nt-att-table td{padding:8px 5px;font-size:11px}
 #workspace.noor-teacher-handset .noor-t4 .nt-att-summary{justify-content:flex-start}
 #workspace.noor-teacher-handset .noor-t4 .nt-card{padding:15px!important}
+
+
+/* 2026-10-20: teacher accessibility polish while preserving burgundy/rose-gold theme */
+.noor-t4{font-size:15px;line-height:1.6}
+.noor-t4 .nt-muted,.noor-t4 .nt-detail,.noor-t4 .nt-event,
+.noor-t4 .nt-activity-row,.noor-t4 .nt-att-table{font-size:14px;line-height:1.55}
+.noor-t4 .nt-detail b,.noor-t4 .nt-detail span,.noor-t4 .nt-status-box small{font-size:13px}
+.noor-t4 .nt-btn,.noor-t4 .nt-complete-btn{font-size:14px;min-height:44px;padding:10px 14px}
+.noor-t4 .nt-btn.small{font-size:13px;min-height:40px;padding:8px 12px}
+.noor-t4 .nt-att-table th,.noor-t4 .nt-att-table td{padding:13px 10px;font-size:13px}
+.noor-t4 .nt-radio{width:26px;height:26px}
+.noor-t4 .nt-profile .nt-photo{min-width:125px;border-radius:50%}
+.noor-t4 .nt-review-requests{padding:4px 0}
+.noor-t4 .nt-review-requests p{padding:9px 12px;border-radius:10px;background:#fdf2de;color:#80572d}
+.noor-t4 :is(button,input,select,textarea):focus-visible{outline:3px solid #b87798;outline-offset:2px}
+@media(max-width:760px){
+ .noor-t4{font-size:15px}
+ .noor-t4 .nt-profile-grid{grid-template-columns:1fr}
+ .noor-t4 .nt-head h1{font-size:clamp(25px,6vw,33px)}
+ .noor-t4 .nt-btn{white-space:normal;text-align:center}
+ .noor-t4 .nt-att-table{min-width:550px}
+ .noor-t4 .nt-att-scroll{overflow-x:auto;overscroll-behavior-x:contain}
+}
