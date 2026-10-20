@@ -90,16 +90,34 @@ async function open(){
  '<section class="pp-card"><h2>My paper drafts</h2><div id="ppSaved" class="pp-list">Loading drafts…</div></section></div>'+
  '<section class="pp-card"><h2>Editable paper</h2><label>Paper title<input id="ppTitle" maxlength="180" placeholder="Title appears after generation"></label>'+
  '<label style="margin-top:12px">Questions<textarea rows="17" id="ppQuestions"></textarea></label>'+
- '<label style="margin-top:12px">Teacher answer key<textarea rows="8" id="ppAnswers"></textarea></label>'+ '<label style="margin-top:12px">Teacher-approved marking rubric<textarea rows="4" id="ppRubric" placeholder="Criteria and mark distribution; teacher reviews all final scores"></textarea></label>'+
+ '<label style="margin-top:12px">Teacher answer key<textarea rows="8" id="ppAnswers"></textarea></label>'+ '<label style="margin-top:12px">Rubric Grading Assistant<textarea rows="5" id="ppRubric" placeholder="Review, customize and approve marking criteria"></textarea></label>'+ '<button class="pp-btn soft" type="button" id="ppRubricAssistant">✦ Suggest Marking Rubric</button><p class="pp-sub">Editable draft based on your paper marks. Teacher approves final grading.</p>'+
  '<div class="pp-actions"><button class="pp-btn" id="ppSave">Save draft</button><button class="pp-btn soft" id="ppPrint">Print / Save PDF</button><label style="display:flex;align-items:center;gap:4px"><input id="ppWithAnswers" style="width:auto" type="checkbox"> Include answers</label></div>'+
  '<div class="pp-card" style="margin-top:15px;padding:14px"><h2>Publish to assigned students</h2><p class="pp-sub">This sends questions only — the answer key remains private.</p><label>Due date and time<input type="datetime-local" id="ppDueAt"></label><label style="margin-top:9px">Total marks<input id="ppTotalMarks" type="number" min="1" max="1000" value="20"></label><div class="pp-actions"><button class="pp-btn" id="ppPublish" type="button">Publish Assignment</button><button class="pp-btn soft" id="ppShowInbox" type="button">Refresh Submissions</button></div><div id="ppPublished" class="pp-list"></div></div>'+ '<h2>Paper preview</h2><div class="pp-preview" id="ppPreview">Your paper will appear here.</div><details style="margin-top:11px"><summary>Teacher-only answer key</summary><div class="pp-preview" id="ppAnswerPreview"></div></details></section></div>';
  $('#ppBack').onclick=()=>a().openView('overview');$('#ppForm').onsubmit=x=>{x.preventDefault();generate()};
  $('#ppQuestions').oninput=()=>$('#ppPreview').textContent=$('#ppQuestions').value;
  v.querySelectorAll('[data-pp-preset]').forEach(btn=>btn.onclick=()=>{const presets={foundation:['easy','5','1'],revision:['balanced','10','2'],challenge:['challenging','15','3']},p=presets[btn.dataset.ppPreset];$('#ppDifficulty').value=p[0];$('#ppCount').value=p[1];$('#ppMarks').value=p[2];$('#ppTotalMarks').value=String(Number(p[1])*Number(p[2]));status('Practice level '+btn.dataset.ppPreset+' selected. Generate and review before sharing.');});
  $('#ppAnswers').oninput=()=>$('#ppAnswerPreview').textContent=$('#ppAnswers').value;
+ $('#ppRubricAssistant').onclick=buildRubric;
  $('#ppContext').onchange=()=>{$('#ppSubjectName').value=paperContexts[Number($('#ppContext').value)]?.subject_name||''};$('#ppSave').onclick=save;$('#ppPrint').onclick=print;
   $('#ppPublish').onclick=publishAssignment;$('#ppShowInbox').onclick=()=>window.NOOR_ASSIGNMENT_PORTAL?.teacherInbox?.();
  await loadPaperContexts();$('#ppContext').onchange?.();await load();window.NOOR_ASSIGNMENT_PORTAL?.teacherInbox?.();
+}
+function buildRubric(){
+ const raw=$('#ppQuestions').value.trim(),marksPerQuestion=Number($('#ppMarks').value)||1;
+ if(!raw)return status('Generate or type your questions before using the rubric assistant.');
+ const numbered=raw.split(/\n/).filter(x=>/^\s*\d+[\).]\s+/.test(x)).length,
+ count=numbered||Number($('#ppCount').value)||1,total=Number($('#ppTotalMarks').value)||count*marksPerQuestion;
+ const type=$('#ppType').value,subject=$('#ppSubjectName').value||'Subject',difficulty=$('#ppDifficulty').value;
+ const criteria=type==='quiz'?['Correct option / factual accuracy','Completeness of answer']:
+  ['Conceptual accuracy','Reasoning, method or supporting evidence','Clarity and completeness'];
+ const weights=criteria.length===2?[80,20]:[60,30,10];
+ const rubric=['NOOR TEACHER REVIEW DRAFT — '+subject,'Question count: '+count+' · Maximum marks: '+total,'Difficulty: '+difficulty,
+  'Teacher-approved criteria (adjust before use):',...criteria.map((label,i)=>(i+1)+'. '+label+' — '+weights[i]+'% of applicable marks'),
+  'Mark the answer against the approved question key and allocated marks.',
+  'Partial credit is awarded by the teacher when supported by the rubric.',
+  'Final marks and feedback must be confirmed by the teacher; do not grade automatically.'];
+ $('#ppRubric').value=rubric.join('\n');
+ status('Suggested rubric created. Review the criteria, save your paper draft, then grade students manually.');
 }
 async function generate(){
  if(waiting||!ready())return;
