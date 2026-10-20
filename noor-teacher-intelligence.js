@@ -54,6 +54,9 @@ function planProgress(assigns,units,progress,year){
 async function mount(ctx){
  const slot=$('#ntTeacherIntelligence');if(!slot||!valid())return;
  const token=++revision,app=A(),db=app.db,school=app.schoolId,user=app.user.id,assignments=ctx?.assignments||[];
+ const existingAttendance=slot.querySelector('.nt-attendance'),existingPlanners=slot.querySelector('#ntTeacherPlanners');
+ if(existingAttendance){slot.insertAdjacentElement('afterend',existingAttendance);if(existingPlanners)existingAttendance.insertAdjacentElement('afterend',existingPlanners);}
+
  slot.innerHTML='<div class="nti-title"><div><span class="nti-eyebrow">YOUR TEACHING WORKSPACE</span><h2>✦ AI Teacher Command Centre</h2><p>Live records, clear priorities — no made-up numbers.</p></div><button type="button" class="nti-refresh" id="ntiRefresh">↻ Refresh</button></div>'+tileMarkup()+'<div class="nti-loading">Checking your assigned classes, periods and assignments…</div>';
  $('#ntiRefresh',slot).onclick=()=>mount(ctx);handleTileClicks(slot);
  if(!assignments.length){slot.innerHTML+='<div class="nti-banner">Your Principal has not assigned any class yet. Class-specific analytics will appear after assignment.</div>'}
@@ -160,6 +163,9 @@ async function mount(ctx){
  (dueSoon.length?'<div class="nti-banner">'+E(dueSoon.length+' assignment deadlines are coming in the next 3 days.')+'</div>':'')+
  (errors.length?'<p class="nti-error">Some records could not be read: '+E(errors.join('; '))+'</p>':'')+
  '<p id="ntiMessage" role="status" class="nti-feedback"></p>';
+ const attendanceNode=document.querySelector('#view-overview .nt-attendance'),planningNode=document.getElementById('ntTeacherPlanners');
+ const deepPanels=slot.querySelector('.nti-grid');
+ if(deepPanels&&attendanceNode){deepPanels.insertAdjacentElement('beforebegin',attendanceNode);if(planningNode)attendanceNode.insertAdjacentElement('afterend',planningNode);}
  $('#ntiRefresh',slot).onclick=()=>mount(ctx);handleTileClicks(slot);
  slot.querySelectorAll('[data-nti-route]').forEach(b=>b.onclick=()=>A().openView?.(b.dataset.ntiRoute));
  slot.querySelectorAll('[data-nti-log]').forEach(b=>b.onclick=()=>editLesson(b.dataset.ntiLog));
