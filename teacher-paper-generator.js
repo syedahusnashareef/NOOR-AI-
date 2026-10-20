@@ -154,7 +154,7 @@ async function publishAssignment(){
  if(!window.NOOR_ASSIGNMENT_PORTAL?.publish)return status('Assignment service unavailable; reload and try again.');
  btn.disabled=true;status('Publishing to your assigned students…');
  try{
-  await window.NOOR_ASSIGNMENT_PORTAL.publish({title,body,context,due_at,max_marks,paper_draft_id:draftId});
+  await window.NOOR_ASSIGNMENT_PORTAL.publish({title,body,context,due_at,max_marks,paper_draft_id:draftId,answer_key_text:$('#ppAnswers').value.trim()});
   status('✓ Assignment published for the selected school/class/section. Students can now access it.');
   await window.NOOR_ASSIGNMENT_PORTAL.teacherInbox();
  }catch(err){status('Publish failed: '+(err.message||'Please retry.'))}
