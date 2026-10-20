@@ -7,12 +7,12 @@ import {chromium} from 'playwright';
  await page.goto(url.href);await page.waitForSelector('#noor-principal');
  await page.waitForFunction(()=>document.querySelector('#pd-status')?.textContent.includes('updated'));
  const assert=(value,message)=>{if(!value)throw Error(message)};
- assert(await page.locator('.pd-kpi').count()===6,'six real-data KPIs');
+ assert(await page.locator('.pd-kpi').count()===4,'four real-data KPIs');
  assert(await page.locator('#pd-kpis').innerText().then(t=>!t.includes('1,250')&&!t.includes('90.2%')),'no fictional KPI figures');
  assert((await page.locator('#pd-trend').innerText()).includes('No attendance records'),'no-data attendance fallback');
  assert((await page.locator('#pd-periods').innerText()).includes('No approved class periods'),'no-data period fallback');
  await page.click('#pd-mode');assert(await page.locator('#noor-principal').evaluate(el=>el.classList.contains('pd-dark')),'theme toggle');
- await page.click('[data-route="notices"]');assert((await page.locator('#preview-toast').innerText()).includes('notices'),'notices quick route');
+ await page.locator('[data-route="notices"]').first().click();assert((await page.locator('#preview-toast').innerText()).includes('notices'),'notices quick route');
  await page.click('[data-route="school-tasks"]');assert((await page.locator('#preview-toast').innerText()).includes('school-tasks'),'tasks quick route');
 
  // In-browser reversible access UX with isolated mock members: no real students modified.
