@@ -1,0 +1,40 @@
+
+#ntTeacherPlanners{display:block;min-width:0;margin:16px 0}
+#ntTeacherPlanners *{box-sizing:border-box}
+#ntTeacherPlanners .ntp-title{display:flex;gap:12px;align-items:center;justify-content:space-between;margin:0 0 12px;flex-wrap:wrap}
+#ntTeacherPlanners .ntp-title small{font:850 10px 'DM Sans',sans-serif;letter-spacing:1.5px;color:#ad738c}
+#ntTeacherPlanners .ntp-title h2{margin:4px 0;color:#53273e;font:850 clamp(21px,2.6vw,26px)/1.25 Manrope,'DM Sans',sans-serif}
+#ntTeacherPlanners .ntp-title p,#ntTeacherPlanners .ntp-muted{color:#826b78;font-size:13px;margin:6px 0}
+#ntTeacherPlanners .ntp-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+#ntTeacherPlanners .ntp-card{border:1px solid #ebd8e2;border-radius:20px;background:#fffcfd;box-shadow:0 7px 28px #602c4710;padding:18px;min-width:0}
+#ntTeacherPlanners .ntp-card h3{color:#652b48;font:850 18px Manrope,'DM Sans',sans-serif;margin:0 0 10px}
+#ntTeacherPlanners .ntp-card p{font-size:13px;color:#826877}
+#ntTeacherPlanners .ntp-card label{font-size:13px;font-weight:750;color:#694056;display:block;margin:10px 0}
+#ntTeacherPlanners .ntp-card select,#ntTeacherPlanners .ntp-card input{font:14px 'DM Sans',sans-serif;color:#482b3b;border:1px solid #ddc4d0;border-radius:11px;padding:11px;background:white;width:100%;max-width:100%;display:block;margin-top:5px;min-height:44px}
+#ntTeacherPlanners .ntp-inline{display:grid;grid-template-columns:1.4fr .6fr;gap:10px}
+#ntTeacherPlanners button{min-height:44px;border-radius:11px;border:1px solid #e7cedc;background:#672940;color:white;padding:11px 14px;font:800 13px 'DM Sans',sans-serif;cursor:pointer}
+#ntTeacherPlanners button:disabled{opacity:.5;cursor:not-allowed}
+#ntTeacherPlanners #ntpRefresh{color:#66354f;background:#fff1f7}
+#ntTeacherPlanners .ntp-deadline{border-top:1px solid #f0e2e9;display:grid;gap:9px;padding:13px 0}
+#ntTeacherPlanners .ntp-deadline>b{font-size:13px}
+#ntTeacherPlanners .ntp-deadline b,#ntTeacherPlanners .ntp-deadline small{display:block;overflow-wrap:anywhere}
+#ntTeacherPlanners .ntp-deadline small{font-size:11px;color:#806a76}
+#ntTeacherPlanners .ntp-deadline small strong{color:#ad723e}
+#ntTeacherPlanners #ntpStatus{font-size:13px;min-height:20px;margin-top:8px}
+.nt-offline-bar{padding:13px;background:linear-gradient(125deg,#fff3e4,#fffaf5);border-radius:13px;border:1px solid #ecd6bc;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;font-size:13px;color:#805534}
+.nt-offline-bar button{font-size:13px}
+#view-attendance .ta-offline-panel{background:#fff4e6;border:1px solid #efdac1}
+#view-attendance .ta-offline-panel .ta-tools{gap:14px}
+@media(max-width:860px){#ntTeacherPlanners .ntp-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){
+ #ntTeacherPlanners{margin:13px 0}
+ #ntTeacherPlanners .ntp-card{border-radius:16px;padding:14px}
+ #ntTeacherPlanners .ntp-title{flex-direction:column;align-items:stretch}
+ #ntTeacherPlanners #ntpRefresh{width:100%}
+ #ntTeacherPlanners .ntp-inline{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #ntTeacherPlanners .ntp-deadline button{width:100%}
+ .nt-offline-bar{align-items:stretch;flex-direction:column}
+ .nt-offline-bar button{width:100%;min-height:44px}
+ #view-attendance .ta-offline-panel button{width:100%;min-height:44px}
+}
+@media(max-width:380px){#ntTeacherPlanners .ntp-inline{grid-template-columns:minmax(0,1fr)}}
