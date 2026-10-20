@@ -46,7 +46,7 @@ async function refresh(){
  try{
   const settings=await db.from('school_settings').select('timezone').eq('school_id',sid).maybeSingle(),d=clock(settings.data?.timezone||'Asia/Kolkata');
   const first=new Date(d.day+'T00:00:00Z');first.setUTCDate(first.getUTCDate()-6);
-  const [students,teachers,staff,periods,runs,sessions,tasks,events,notices,classes,sections]=await Promise.all([
+  const [students,teachers,staff,periods,runs,sessions,tasks,events,notices,classes]=await Promise.all([
    db.from('profiles').select('id',{count:'exact',head:true}).eq('school_id',sid).eq('role','student').eq('status','active'),
    db.from('profiles').select('id,full_name').eq('school_id',sid).eq('role','teacher').eq('status','active').limit(500),
    db.from('noor_staff_attendance').select('teacher_id,status').eq('school_id',sid).eq('attendance_date',d.day).limit(500),
@@ -56,9 +56,10 @@ async function refresh(){
    db.from('school_tasks').select('title,status,priority,due_at').eq('school_id',sid).limit(150),
    db.from('calendar_events').select('title,starts_at,event_type,status').eq('school_id',sid).gte('starts_at',new Date().toISOString()).order('starts_at').limit(15),
    db.from('school_notices').select('title,starts_at,ends_at,is_active').eq('school_id',sid).eq('is_active',true).order('starts_at',{ascending:false}).limit(30),
-   db.from('classes').select('id,name,sort_order').eq('school_id',sid).eq('is_active',true).order('sort_order').limit(150),
-   db.from('sections').select('id,class_id,name').eq('is_active',true).limit(500)
+   db.from('classes').select('id,name,sort_order').eq('school_id',sid).eq('is_active',true).order('sort_order').limit(150)
   ]);
+  const sections=classes.error||!classes.data?.length?{data:[],error:classes.error||null}:
+   await db.from('sections').select('id,class_id,name').eq('is_active',true).in('class_id',classes.data.map(c=>c.id)).limit(500);
   if(a().schoolId!==sid||a().user?.id!==uid||!permitted())return;
   const errors=[['students',students],['teachers',teachers],['staff attendance',staff],['periods',periods],['period runs',runs],['attendance',sessions],['tasks',tasks],['calendar',events],['notices',notices],['classes',classes],['sections',sections]].filter(x=>x[1].error).map(x=>x[0]);
   const sessionsRows=sessions.data||[],ids=sessionsRows.map(x=>x.id);
