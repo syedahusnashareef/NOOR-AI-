@@ -26,7 +26,7 @@ async function readAll(){
   notes:db().from('smart_notes').select('id,title,content,subject_id,updated_at,teacher_id').eq('school_id',school).eq('class_id',me.class_id||'00000000-0000-0000-0000-000000000000').eq('status','published').eq('published_to_students',true).order('updated_at',{ascending:false}).limit(150),
   notices:db().from('school_notices').select('id,title,body,starts_at,ends_at,created_at').eq('school_id',school).eq('is_active',true).contains('target_roles',['student']).order('starts_at',{ascending:false}).limit(100),
   events:db().from('calendar_events').select('id,title,description,event_type,starts_at,ends_at,location').eq('school_id',school).gte('starts_at',new Date(Date.now()-90*86400000).toISOString()).order('starts_at').limit(500),
-  assessments:db().from('school_assessments').select('id,title,assessment_date,max_marks,subject_id,assessment_type,status,section_id').eq('school_id',school).eq('class_id',me.class_id||'00000000-0000-0000-0000-000000000000').in('status',['conducted','marked']).order('assessment_date',{ascending:false}).limit(250),
+  assessments:db().from('school_assessments').select('id,title,assessment_date,max_marks,subject_id,assessment_type,status,section_id').eq('school_id',school).eq('class_id',me.class_id||'00000000-0000-0000-0000-000000000000').in('status',['planned','conducted','marked']).order('assessment_date',{ascending:false}).limit(250),
   results:db().from('assessment_results').select('id,assessment_id,marks_obtained,grade_label,teacher_feedback,marked_at').eq('school_id',school).eq('student_id',id).order('marked_at',{ascending:false}).limit(400),
   attendance:db().from('attendance_records').select('id,session_id,status,marked_at').eq('school_id',school).eq('student_id',id).order('marked_at',{ascending:false}).limit(420),
   assignments:db().from('noor_student_assignments').select('id,title,instructions,paper_text,assignment_type,max_marks,due_at,published_at,subject_id,section_id').eq('school_id',school).eq('class_id',me.class_id||'00000000-0000-0000-0000-000000000000').eq('is_active',true).lte('published_at',new Date().toISOString()).order('published_at',{ascending:false}).limit(250),
@@ -43,8 +43,8 @@ async function readAll(){
  const sectionId=me.section_id;
  data.assignments=data.assignments.filter(x=>!x.section_id||x.section_id===sectionId);
  data.assessments=data.assessments.filter(x=>!x.section_id||x.section_id===sectionId);
- data.marks=data.results.map(r=>{const a=data.assessments.find(x=>x.id===r.assessment_id);return a?{...r,assessment:a,pct:N(a.max_marks)>0?100*N(r.marks_obtained)/N(a.max_marks):null}:null}).filter(Boolean).sort((a,b)=>new Date(a.assessment.assessment_date)-new Date(b.assessment.assessment_date));
- data.recordDays=data.attendance.map(r=>{const s=data.sessions.find(s=>s.id===r.session_id);return s?{day:s.attendance_date,status:r.status}:null}).filter(Boolean);
+ data.marks=data.results.map(r=>{const a=data.assessments.find(x=>x.id===r.assessment_id && x.status!=='planned');return a?{...r,assessment:a,pct:N(a.max_marks)>0?100*N(r.marks_obtained)/N(a.max_marks):null}:null}).filter(Boolean).sort((a,b)=>new Date(a.assessment.assessment_date)-new Date(b.assessment.assessment_date));
+ data.exams=data.assessments.filter(x=>x.status==='planned'&&x.assessment_date>=isoDay(new Date()));const reviewedHomework=data.submissions.filter(x=>x.status==='reviewed'&&x.marks_obtained!=null).map(x=>{const asg=data.assignments.find(a=>a.id===x.assignment_id);if(!asg||!N(asg.max_marks))return null;return {marks_obtained:x.marks_obtained,teacher_feedback:x.teacher_feedback,assessment:{id:asg.id,title:asg.title,subject_id:asg.subject_id,assessment_type:'homework',assessment_date:(x.reviewed_at||x.submitted_at).slice(0,10),max_marks:asg.max_marks},pct:100*N(x.marks_obtained)/N(asg.max_marks)};}).filter(Boolean);data.marks=data.marks.concat(reviewedHomework).sort((a,b)=>new Date(a.assessment.assessment_date)-new Date(b.assessment.assessment_date));data.recordDays=data.attendance.map(r=>{const s=data.sessions.find(s=>s.id===r.session_id);return s?{day:s.attendance_date,status:r.status}:null}).filter(Boolean);
 }
 const subject=id=>data.subjects?.find(s=>s.id===id)?.name||'General subject';
 const eligible=()=>data.marks||[];
@@ -58,7 +58,7 @@ const sectionText=()=>data.sections?.find(x=>x.id===p().section_id)?.name||p().r
 const notices=()=>data.notices?.filter(x=>(!x.starts_at||Date.parse(x.starts_at)<=Date.now())&&(!x.ends_at||Date.parse(x.ends_at)>Date.now()))||[];
 const greeting=()=>{let n=p().full_name||'Student';return n;};
 const alertErrors=()=>errors.length?'<div class="sp-status error">Some records could not load: '+E(errors.slice(0,3).join('; '))+'. Review database access and refresh.</div>':'';
-function dayEvents(d){return [...(data.events||[]).filter(x=>x.starts_at?.slice(0,10)===d).map(x=>({text:x.title,type:'event'})),...(data.assignments||[]).filter(x=>x.due_at?.slice(0,10)===d).map(x=>({text:'Due: '+x.title,type:'due'}))]}
+function dayEvents(d){return [...(data.events||[]).filter(x=>x.starts_at?.slice(0,10)===d).map(x=>({text:x.title,type:'event'})),...(data.assignments||[]).filter(x=>x.due_at?.slice(0,10)===d).map(x=>({text:'Due: '+x.title,type:'due'})),...(data.exams||[]).filter(x=>x.assessment_date===d).map(x=>({text:'Exam: '+x.title,type:'event'}))]}
 function calGrid(year,month,attendance=false){
  const first=new Date(year,month,1),start=first.getDay(),end=new Date(year,month+1,0).getDate(),cells=[];
  for(let i=0;i<start;i++)cells.push('<div class="sp-day empty"></div>');
@@ -80,12 +80,12 @@ function overview(){
  const kp='<div class="sp-kpis">'+kpis.map((x,i)=>'<button type="button" class="sp-kpi" data-sp-nav="'+['student-attendance','student-progress','student-homework','student-progress'][i]+'" style="text-align:left"><div class="sp-label">'+E(x[0])+'</div><div class="sp-value">'+E(x[1])+'</div><small>'+E(x[2])+'</small></button>').join('')+'</div>';
  const next=(data.assignments||[]).filter(x=>!data.submissions.some(s=>s.assignment_id===x.id)).slice(0,4).map(x=>item(x.title,subject(x.subject_id)+' · '+(x.due_at?'Due '+dayTime(x.due_at):'No deadline'),btn('Open','student-homework'))).join('')||empty('No outstanding homework.');
  const recentNotes=(data.notes||[]).slice(0,3).map(x=>item(x.title,subject(x.subject_id)+' · '+date(x.updated_at),btn('Read','student-learning'))).join('')||empty('No published teacher notes yet.');
- const recentNotice=notices().slice(0,3).map(x=>item(x.title,x.body?.slice(0,110)||date(x.created_at),btn('Read','notices'))).join('')||empty('No active school announcements.');
+ const examNext=(data.exams||[]).slice().sort((a,b)=>a.assessment_date.localeCompare(b.assessment_date)).slice(0,3);const recentNotice=notices().slice(0,3).map(x=>item(x.title,x.body?.slice(0,110)||date(x.created_at),btn('Read','notices'))).join('')||empty('No active school announcements.');
  const mini=box('My Classroom','Latest teacher-published learning material','<div class="sp-list">'+recentNotes+'</div>',btn('Learning','student-learning'));
  const graph=box('Academic Performance','Actual school-assessed marks only',barsMarkup(m),btn('Progress','student-progress'));
  const due=box('Homework & Deadlines','Tasks requiring your response','<div class="sp-list">'+next+'</div>',btn('All tasks','student-homework'));
- const nbox=box('Latest School Notices','Relevant authorised announcements','<div class="sp-list">'+recentNotice+'</div>',btn('All notices','notices'));
- root().innerHTML='<div class="sp-root">'+header+kp+alertErrors()+'<div class="sp-grid">'+miniCalendar()+mini+'</div><div class="sp-grid">'+graph+due+'</div>'+nbox+'</div>';
+ const exbox=box('Upcoming Exams','Countdown to school-planned assessments',examNext.length?'<div class="sp-list">'+examNext.map(x=>item(x.title,subject(x.subject_id)+' · '+date(x.assessment_date)+' · '+Math.max(0,Math.ceil((new Date(x.assessment_date+'T23:59:59')-new Date())/86400000))+' day(s) left')).join('')+'</div>':empty('No upcoming school exams have been scheduled yet.'));const nbox=box('Latest School Notices','Relevant authorised announcements','<div class="sp-list">'+recentNotice+'</div>',btn('All notices','notices'));
+ root().innerHTML='<div class="sp-root">'+header+kp+alertErrors()+'<div class="sp-grid">'+miniCalendar()+mini+'</div><div class="sp-grid">'+graph+due+'</div>'+exbox+nbox+'</div>';
  document.body.classList.add('noor-student-mode');
 }
 function barsMarkup(marks){const groups={};marks.forEach(x=>{const k=subject(x.assessment.subject_id);(groups[k]??=[]).push(x.pct)});
@@ -129,7 +129,7 @@ function calendar(){
  content='<label>Selected day<input type="date" id="spFocusDate" value="'+E(dateFocus)+'"></label><div style="margin-top:14px">'+eventRows([...ev,...deadlines].sort((a,b)=>new Date(a.starts_at)-new Date(b.starts_at)))+'</div>';
  }
  const selected=dayEvents(dateFocus);
- renderShell('student-calendar','Smart School Calendar','Monthly, weekly and daily class-related events. School-added holidays are shown when published.',box('Academic Calendar','Exams, school holidays, homework and events',tabs+content)+box('Selected date: '+date(dateFocus),'Events and assignment deadlines',selected.length?'<div class="sp-list">'+selected.map(x=>item(x.text,x.type)).join('')+'</div>':empty('No events on this date.')));
+ renderShell('student-calendar','Smart School Calendar','Monthly, weekly and daily class-related events. School-added holidays are shown when published.',box('Academic Calendar','Exams, school holidays, homework and events',tabs+content+'<div class="sp-row" style="margin-top:14px"><button class="sp-action secondary" type="button" data-sp-nav="school-calendar">Indian festival & holiday reference →</button></div>')+box('Selected date: '+date(dateFocus),'Events and assignment deadlines',selected.length?'<div class="sp-list">'+selected.map(x=>item(x.text,x.type)).join('')+'</div>':empty('No events on this date.')));
 }
 function learning(){
  const list=(data.notes||[]).filter(x=>(focusSubject==='all'||x.subject_id===focusSubject)&&(!noteQuery||[x.title,subject(x.subject_id)].join(' ').toLowerCase().includes(noteQuery.toLowerCase())));
@@ -189,7 +189,7 @@ eventArea()?.addEventListener('click',async ev=>{
  if(t.hasAttribute('data-sp-refresh'))return await refresh();
  if(t.hasAttribute('data-sp-month')){calMonth=new Date(calMonth.getFullYear(),calMonth.getMonth()+Number(t.dataset.spMonth),1);const id=document.querySelector('.view.active')?.id;return id==='view-student-attendance'?attendance():calendar();}
  if(t.hasAttribute('data-sp-cal-mode')){mode=t.dataset.spCalMode;return calendar();}
- if(t.hasAttribute('data-sp-day')){dateFocus=t.dataset.spDay;mode='day';return calendar();}
+ if(t.hasAttribute('data-sp-day')){dateFocus=t.dataset.spDay;mode='day';if(document.querySelector('.view.active')?.id!=='view-student-calendar')return app().openView('student-calendar');return calendar();}
  if(t.hasAttribute('data-sp-note-tab')){noteTab=t.dataset.spNoteTab;return learning();}
  if(t.hasAttribute('data-sp-goal')){const v=data.plans.find(x=>x.id===t.dataset.spGoal);if(!v)return;const r=await db().from('noor_student_study_plans').update({is_done:!v.is_done}).eq('id',v.id).eq('student_id',u().id);if(r.error)throw r.error;await refresh();return;}
  if(t.hasAttribute('data-sp-delete-goal')){if(!confirm('Remove this study goal?'))return;const r=await db().from('noor_student_study_plans').delete().eq('id',t.dataset.spDeleteGoal).eq('student_id',u().id);if(r.error)throw r.error;return await refresh();}
@@ -208,11 +208,11 @@ eventArea()?.addEventListener('submit',async e=>{
   const answer=v('answer'),file=f.elements.attachment?.files?.[0];if(!answer&&!file)throw Error('Write an answer or choose a file first.');
   const prev=data.submissions.find(x=>x.assignment_id===assignment.id);if(prev?.status==='reviewed')throw Error('Teacher-reviewed submissions cannot be modified.');
   const record={school_id:sid(),assignment_id:assignment.id,student_id:u().id,answer_text:answer};
-  const r=prev?await db().from('noor_student_submissions').update({answer_text:answer}).eq('id',prev.id).eq('student_id',u().id):
+  const r=prev?await db().from('noor_student_submissions').update({answer_text:answer}).eq('id',prev.id).eq('student_id',u().id).select('id').single():
    await db().from('noor_student_submissions').insert(record).select('id').single();
   if(r.error)throw r.error;
   const id=prev?.id||r.data.id;
-  if(file){const path=await uploadAnswer(file,assignment);const upd=await db().from('noor_student_submissions').update({file_path:path}).eq('id',id).eq('student_id',u().id);if(upd.error)throw upd.error;}
+  if(file){const path=await uploadAnswer(file,assignment);const upd=await db().from('noor_student_submissions').update({file_path:path}).eq('id',id).eq('student_id',u().id).select('id').single();if(upd.error)throw upd.error;}
   output='Submitted successfully to your school database.';
  }else if(f.id==='spGoalForm'){
   if(v('goal').length<2||!v('date'))throw Error('Enter goal and date.');
