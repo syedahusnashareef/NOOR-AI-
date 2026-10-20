@@ -83,18 +83,19 @@ async function open(){
  '<label>Language<select id="ppLang">'+['English','Urdu','Hindi','Telugu','Arabic','Bilingual (English + Urdu)'].map(x=>'<option>'+x+'</option>').join('')+'</select></label>'+
  '<label>Number of questions<select id="ppCount">'+[5,8,10,15,20,25].map(x=>'<option '+(x===10?'selected':'')+'>'+x+'</option>').join('')+'</select></label>'+
  '<label>Difficulty<select id="ppDifficulty"><option value="easy">Easy</option><option value="balanced" selected>Balanced</option><option value="challenging">Challenging</option></select></label>'+
- '<label>Marks/question<input id="ppMarks" type="number" min="1" max="20" value="2"></label><label>Topic (optional)<input id="ppTopic" maxlength="180" placeholder="Fractions"></label>'+
+ '<label class="wide"><span>Adaptive Practice Presets</span><span class="pp-actions" style="display:flex;gap:7px;flex-wrap:wrap;margin-top:7px"><button type="button" class="pp-btn soft" data-pp-preset="foundation">Foundation</button><button type="button" class="pp-btn soft" data-pp-preset="revision">Revision</button><button type="button" class="pp-btn soft" data-pp-preset="challenge">Challenge</button></span></label>'+ '<label>Marks/question<input id="ppMarks" type="number" min="1" max="20" value="2"></label><label>Topic (optional)<input id="ppTopic" maxlength="180" placeholder="Fractions"></label>'+
  '<label class="wide">Short description (optional if photo)<textarea id="ppDescription" placeholder="e.g. Questions about the water cycle"></textarea></label>'+
  '<label class="wide pp-file">Choose textbook photos (optional if description)<input id="ppImages" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>'+
  '<div class="wide pp-actions"><button class="pp-btn" type="submit" id="ppGenerate">✦ Generate Paper</button><button class="pp-btn soft" type="reset">Clear input</button></div></form><p class="pp-notice">AI makes an editable draft, not an automatically conducted exam. Always check the questions and answer key.</p><p id="ppStatus" class="pp-status" role="status"></p></section>'+
  '<section class="pp-card"><h2>My paper drafts</h2><div id="ppSaved" class="pp-list">Loading drafts…</div></section></div>'+
  '<section class="pp-card"><h2>Editable paper</h2><label>Paper title<input id="ppTitle" maxlength="180" placeholder="Title appears after generation"></label>'+
  '<label style="margin-top:12px">Questions<textarea rows="17" id="ppQuestions"></textarea></label>'+
- '<label style="margin-top:12px">Teacher answer key<textarea rows="8" id="ppAnswers"></textarea></label>'+
+ '<label style="margin-top:12px">Teacher answer key<textarea rows="8" id="ppAnswers"></textarea></label>'+ '<label style="margin-top:12px">Teacher-approved marking rubric<textarea rows="4" id="ppRubric" placeholder="Criteria and mark distribution; teacher reviews all final scores"></textarea></label>'+
  '<div class="pp-actions"><button class="pp-btn" id="ppSave">Save draft</button><button class="pp-btn soft" id="ppPrint">Print / Save PDF</button><label style="display:flex;align-items:center;gap:4px"><input id="ppWithAnswers" style="width:auto" type="checkbox"> Include answers</label></div>'+
  '<div class="pp-card" style="margin-top:15px;padding:14px"><h2>Publish to assigned students</h2><p class="pp-sub">This sends questions only — the answer key remains private.</p><label>Due date and time<input type="datetime-local" id="ppDueAt"></label><label style="margin-top:9px">Total marks<input id="ppTotalMarks" type="number" min="1" max="1000" value="20"></label><div class="pp-actions"><button class="pp-btn" id="ppPublish" type="button">Publish Assignment</button><button class="pp-btn soft" id="ppShowInbox" type="button">Refresh Submissions</button></div><div id="ppPublished" class="pp-list"></div></div>'+ '<h2>Paper preview</h2><div class="pp-preview" id="ppPreview">Your paper will appear here.</div><details style="margin-top:11px"><summary>Teacher-only answer key</summary><div class="pp-preview" id="ppAnswerPreview"></div></details></section></div>';
  $('#ppBack').onclick=()=>a().openView('overview');$('#ppForm').onsubmit=x=>{x.preventDefault();generate()};
  $('#ppQuestions').oninput=()=>$('#ppPreview').textContent=$('#ppQuestions').value;
+ v.querySelectorAll('[data-pp-preset]').forEach(btn=>btn.onclick=()=>{const presets={foundation:['easy','5','1'],revision:['balanced','10','2'],challenge:['challenging','15','3']},p=presets[btn.dataset.ppPreset];$('#ppDifficulty').value=p[0];$('#ppCount').value=p[1];$('#ppMarks').value=p[2];$('#ppTotalMarks').value=String(Number(p[1])*Number(p[2]));status('Practice level '+btn.dataset.ppPreset+' selected. Generate and review before sharing.');});
  $('#ppAnswers').oninput=()=>$('#ppAnswerPreview').textContent=$('#ppAnswers').value;
  $('#ppContext').onchange=()=>{$('#ppSubjectName').value=paperContexts[Number($('#ppContext').value)]?.subject_name||''};$('#ppSave').onclick=save;$('#ppPrint').onclick=print;
   $('#ppPublish').onclick=publishAssignment;$('#ppShowInbox').onclick=()=>window.NOOR_ASSIGNMENT_PORTAL?.teacherInbox?.();
@@ -148,7 +149,7 @@ async function save(){
  const title=$('#ppTitle').value.trim()||TYPE[$('#ppType').value],row={
  school_id:a().schoolId,teacher_id:a().user.id,title:title.slice(0,180),paper_type:$('#ppType').value,class_id:context.class_id,section_id:context.section_id,subject_id:context.subject_id,
  language:$('#ppLang').value,source_description:$('#ppDescription').value.slice(0,10000),
- content:{...(output||{}),paper_text:paper,answer_key_text:answer,teacher_subject_name:$('#ppSubjectName').value.trim(),teacher_edited:true},updated_at:new Date().toISOString()
+ content:{...(output||{}),paper_text:paper,answer_key_text:answer,teacher_subject_name:$('#ppSubjectName').value.trim(),teacher_rubric_text:$('#ppRubric').value.trim(),teacher_edited:true},updated_at:new Date().toISOString()
  };
  $('#ppSave').disabled=true;
  try{
@@ -178,7 +179,7 @@ async function print(){
   ' · Subject: '+e(ctx.subject_name||$('#ppSubjectName')?.value||'________________')+' · Date: '+e(new Date().toLocaleDateString('en-IN'))+'</p></header>';
  el.innerHTML=head+'<p style="font-size:10pt">Student Name: _______________________ &nbsp; Roll Number: ___________</p>'+
   '<pre>'+e(questions)+'</pre>'+
-  ($('#ppWithAnswers').checked?'<hr><h2>Teacher-only answer key (confidential)</h2><pre>'+e($('#ppAnswers').value)+'</pre>':'')+
+  ($('#ppWithAnswers').checked?'<hr><h2>Teacher-only answer key (confidential)</h2><pre>'+e($('#ppAnswers').value)+'</pre>'+(($('#ppRubric').value||'').trim()?'<h3>Marking rubric</h3><pre>'+e($('#ppRubric').value)+'</pre>':''):'')+
   '<footer style="margin-top:30px;text-align:center;font:9pt Arial;color:#777">Powered by NOOR School Management</footer>';
  window.print();
 }
@@ -188,7 +189,7 @@ async function load(){
  if(r.error){box.textContent='Could not load drafts: '+r.error.message;return}
  const rows=r.data||[];
  box.innerHTML=rows.length?rows.map(x=>'<div><div><strong>'+e(x.title)+'</strong><small>'+e(TYPE[x.paper_type]||'Paper')+' · '+e(new Date(x.updated_at).toLocaleDateString('en-IN'))+'</small></div><button class="pp-btn soft" data-paper="'+e(x.id)+'">Edit</button></div>').join(''):'<p class="pp-sub">No saved papers yet.</p>';
- box.onclick=ev=>{const b=ev.target.closest('[data-paper]');if(!b)return;const item=rows.find(x=>x.id===b.dataset.paper);if(!item)return;draftId=item.id;output=item.content||{};$('#ppType').value=item.paper_type;$('#ppLang').value=item.language;const i=paperContexts.findIndex(x=>x.class_id===item.class_id&&x.section_id===(item.section_id||null)&&x.subject_id===(item.subject_id||null));if(i>=0)$('#ppContext').value=String(i);$('#ppSubjectName').value=item.content?.teacher_subject_name||paperContexts[i]?.subject_name||'';display(item.title,item.content?.paper_text||paperText(item.content),item.content?.answer_key_text||answerText(item.content));status('Saved paper loaded for editing.');$('#ppQuestions').scrollIntoView({behavior:'smooth',block:'center'})};
+ box.onclick=ev=>{const b=ev.target.closest('[data-paper]');if(!b)return;const item=rows.find(x=>x.id===b.dataset.paper);if(!item)return;draftId=item.id;output=item.content||{};$('#ppType').value=item.paper_type;$('#ppLang').value=item.language;const i=paperContexts.findIndex(x=>x.class_id===item.class_id&&x.section_id===(item.section_id||null)&&x.subject_id===(item.subject_id||null));if(i>=0)$('#ppContext').value=String(i);$('#ppSubjectName').value=item.content?.teacher_subject_name||paperContexts[i]?.subject_name||'';$('#ppRubric').value=item.content?.teacher_rubric_text||'';display(item.title,item.content?.paper_text||paperText(item.content),item.content?.answer_key_text||answerText(item.content));status('Saved paper loaded for editing.');$('#ppQuestions').scrollIntoView({behavior:'smooth',block:'center'})};
 }
 window.NOOR_PAPER_GENERATOR={open};
 })();
