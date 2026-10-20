@@ -53,7 +53,7 @@ async function render(){
  const school=app.schoolId,uid=app.user.id,db=app.db,weekday=new Date().getDay();
  const [extra,periods,runs,checkin,assignees,personal,notices,calendar,assignment,membership]=await Promise.all([
  db.from('noor_teacher_profile_details').select('*').eq('school_id',school).eq('teacher_id',uid).maybeSingle(),
- db.from('noor_teacher_periods').select('id,period_number,weekday,start_time,end_time,subject_name,class_label,approval_status,block_type').eq('school_id',school).eq('teacher_id',uid).order('weekday').order('start_time').limit(100),
+ db.from('noor_teacher_periods').select('id,period_number,weekday,start_time,end_time,subject_name,class_label,approval_status,block_type,class_id,section_id,subject_id').eq('school_id',school).eq('teacher_id',uid).order('weekday').order('start_time').limit(100),
  db.from('noor_teacher_period_runs').select('id,period_id,status,started_at,finished_at').eq('school_id',school).eq('teacher_id',uid).eq('class_date',today()),
  db.from('noor_staff_attendance').select('id,status,checked_in_at').eq('school_id',school).eq('teacher_id',uid).eq('attendance_date',today()).maybeSingle(),
  db.from('task_assignees').select('task_id,status').eq('school_id',school).eq('assignee_id',uid).limit(40),
@@ -104,7 +104,7 @@ async function render(){
  (staff?'':'<button class="nt-btn small" id="ntCheckIn">Check in</button>')+'</div>'+
  '<div class="nt-status-box"><span class="nt-round">▦</span><div><b>'+(currentPeriod?'Period '+esc(currentPeriod.period_number)+' · '+esc(currentPeriod.subject_name):'No current period')+'</b><small>'+(currentPeriod?esc(currentPeriod.class_label)+' · '+esc(prettyTime(currentPeriod.start_time)):'Your approved schedule is shown on the left')+'</small></div></div>'+
  '<div class="nt-status-box"><span class="nt-round">◉</span><div><b>Principal activity view</b><small id="ntLiveStatus">Today\'s class activity and check-in are saved to the school database.</small></div></div></div></section>'+
- '<section class="nt-card"><div class="nt-card-head"><div><span class="nt-icon">✦</span><h2>Notices & Jinni</h2></div><button class="nt-btn small" data-link="notices">View all</button></div>'+
+ '<section class="nt-card"><div class="nt-card-head"><div><span class="nt-icon">✦</span><h2>Notices & AI</h2></div><button class="nt-btn small" data-link="notices">View all</button></div>'+
  (validNotices.slice(0,3).map(x=>'<button type="button" class="nt-event" style="width:100%;text-align:left;background:none;border:0" data-link="notices"><span class="nt-round">▤</span><span><b>'+esc(x.title)+'</b><small>'+esc(formatDate(x.created_at))+'</small></span><span class="nt-arrow">›</span></button>').join('')||'<p class="nt-muted">No school notices for teachers yet.</p>')+
  '<button type="button" class="nt-event" style="width:100%;text-align:left;background:none;border:0" data-link="notifications"><span class="nt-round">✧</span><span><b>School messages</b><small>View tasks and communication</small></span><span class="nt-arrow">›</span></button></section>'+
  '<section class="nt-card"><div class="nt-card-head"><div><span class="nt-icon">✓</span><h2>Principal Tasks</h2></div><button class="nt-btn small" data-link="weekly-plan">Weekly plan</button></div>'+
@@ -204,27 +204,59 @@ async function uploadPhoto(e){
  }catch(err){notify('Photo could not be updated: '+err.message,'error')}
  finally{e.target.value=''}
 }
-function showPeriodEditor(p){
- const d=new Date(),weekday=p?.weekday??d.getDay();
- const dayOptions=days.map((x,i)=>'<option value="'+i+'" '+(i===weekday?'selected':'')+'>'+x+'</option>').join('');
- const kindOptions=['class','break','lunch'].map(x=>'<option value="'+x+'" '+((p?.block_type||'class')===x?'selected':'')+'>'+x[0].toUpperCase()+x.slice(1)+'</option>').join('');
- const body='<label>Day of week<select name="weekday">'+dayOptions+'</select></label>'+
- field('Period number','period_number',p?.period_number||1,'number','min="1" max="15" required')+
- field('Start time','start_time',fmt(p?.start_time||'09:00'),'time','required')+
- field('End time','end_time',fmt(p?.end_time||'09:45'),'time','required')+
- '<label>Block type<select name="block_type">'+kindOptions+'</select></label>'+
- field('Subject','subject_name',p?.subject_name||'','text','required maxlength="80"')+
- '<div class="nt4-span">'+field('Class & Section','class_label',p?.class_label||'','text','required maxlength="70" placeholder="e.g. Class 8 · Section B"')+'</div>';
- modal(p?'Edit Timetable Period':'Add Timetable Period',body,async f=>{
- const a=get(),v=name=>String(f.elements[name]?.value||'').trim();
- if(!v('subject_name')||!v('class_label'))throw Error('Subject and class details are required for an official period.');
- if(v('start_time')>=v('end_time'))throw Error('The end time must be later than start time.');
- const values={weekday:Number(v('weekday')),period_number:Number(v('period_number')),start_time:v('start_time'),end_time:v('end_time'),subject_name:v('subject_name'),class_label:v('class_label'),block_type:v('block_type'),approval_status:'approved'};
- const r=p?await a.db.from('noor_teacher_periods').update(values).eq('id',p.id).eq('school_id',a.schoolId).eq('teacher_id',a.user.id):
- await a.db.from('noor_teacher_periods').insert({...values,school_id:a.schoolId,teacher_id:a.user.id,status:'upcoming'});
- if(r.error)throw r.error;
- notify('Your timetable updated. Principal can see your school schedule.');
- });
+async function showPeriodEditor(p){
+ const app=get(),db=app.db;
+ try{
+  const r=await db.from('teacher_assignments').select('class_id,section_id,subject_id').eq('school_id',app.schoolId).eq('teacher_id',app.user.id).eq('is_active',true).limit(200);
+  if(r.error)throw r.error;
+  if(!r.data?.length)return notify('Principal must assign your classes and sections first.','error');
+  const ids=[...new Set(r.data.map(x=>x.class_id))];
+  const [cs,ss,subs]=await Promise.all([
+    db.from('classes').select('id,name').eq('school_id',app.schoolId).eq('is_active',true).in('id',ids),
+    db.from('sections').select('id,class_id,name').eq('is_active',true).in('class_id',ids),
+    db.from('subjects').select('id,class_id,name').eq('school_id',app.schoolId)
+  ]);
+  if(cs.error||ss.error||subs.error)throw cs.error||ss.error||subs.error;
+  const cm=new Map((cs.data||[]).map(x=>[x.id,x])), sections=ss.data||[],subj=subs.data||[],options=[];
+  for(const item of r.data){
+    const c=cm.get(item.class_id);if(!c)continue;
+    const selected=item.section_id?sections.filter(x=>x.id===item.section_id):sections.filter(x=>x.class_id===item.class_id);
+    const subject=subj.find(x=>x.id===item.subject_id);
+    for(const sec of selected.length?selected:[null]){
+      const entry={class_id:c.id,section_id:sec?.id||null,subject_id:subject?.id||null,subject_name:subject?.name||'',class_label:c.name+(sec?' · Section '+sec.name:'')};
+      if(!options.some(x=>x.class_id===entry.class_id&&x.section_id===entry.section_id&&x.subject_id===entry.subject_id))options.push(entry);
+    }
+  }
+  if(!options.length)throw Error('No active assigned classes.');
+  const daysHTML=days.map((d,i)=>'<option value="'+i+'" '+((p?.weekday??new Date().getDay())===i?'selected':'')+'>'+d+'</option>').join('');
+  const kinds=['class','break','lunch'].map(x=>'<option value="'+x+'" '+((p?.block_type||'class')===x?'selected':'')+'>'+x+'</option>').join('');
+  let selected=options.findIndex(x=>x.class_id===p?.class_id&&x.section_id===(p?.section_id||null));
+  if(selected<0)selected=0;
+  const choices=options.map((x,i)=>'<option value="'+i+'" '+(i===selected?'selected':'')+'>'+esc(x.class_label)+(x.subject_name?' - '+esc(x.subject_name):'')+'</option>').join('');
+  const body='<label>Day of week<select name="weekday">'+daysHTML+'</select></label>'+
+    field('Period number','period_number',p?.period_number||1,'number','min="1" max="15" required')+
+    field('Start time','start_time',fmt(p?.start_time||'09:00'),'time','required')+
+    field('End time','end_time',fmt(p?.end_time||'09:45'),'time','required')+
+    '<label>Block type<select name="block_type">'+kinds+'</select></label>'+
+    '<label>Assigned Class & Section<select name="context_index" required>'+choices+'</select></label>'+
+    field('Subject','subject_name',p?.subject_name||options[selected].subject_name,'text','required maxlength="80"')+
+    '<p class="nt4-span nt-muted">Timetable changes need Principal approval before becoming active.</p>';
+  const modalNode=modal(p?'Edit period request':'New timetable request',body,async form=>{
+    const val=k=>String(form.elements[k]?.value||'').trim(),context=options[Number(val('context_index'))];
+    if(!context)throw Error('Choose an assigned school class.');
+    if(!val('subject_name'))throw Error('Subject is required.');
+    if(val('start_time')>=val('end_time'))throw Error('End time must be later than start time.');
+    const values={weekday:Number(val('weekday')),period_number:Number(val('period_number')),start_time:val('start_time'),end_time:val('end_time'),block_type:val('block_type'),
+      class_id:context.class_id,section_id:context.section_id,subject_id:context.subject_id,class_label:context.class_label,subject_name:context.subject_name||val('subject_name'),approval_status:'pending'};
+    const result=p?await db.from('noor_teacher_periods').update(values).eq('id',p.id).eq('school_id',app.schoolId).eq('teacher_id',app.user.id):
+      await db.from('noor_teacher_periods').insert({...values,school_id:app.schoolId,teacher_id:app.user.id,status:'upcoming'});
+    if(result.error)throw result.error;
+    notify('Timetable request sent for Principal approval.','success');
+  });
+  modalNode.querySelector('[name="context_index"]').onchange=ev=>{
+    modalNode.querySelector('[name="subject_name"]').value=options[Number(ev.target.value)]?.subject_name||'';
+  };
+ }catch(err){notify('Timetable request failed: '+(err?.message||'Try again.'),'error')}
 }
 function openPaper(){
  // Create the view before routing so openView can activate it normally.
