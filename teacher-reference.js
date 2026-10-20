@@ -145,7 +145,7 @@ async function render(){
  '<div class="nt-reference-ring-caption">'+complete+' completed · '+Math.max(0,approved.length-complete)+' remaining</div></article></div>'+
  '<div class="nt-reference-quick nt-card"><div class="nt-card-head"><div><span class="nt-icon">✦</span><h2>Quick Actions</h2></div></div><div class="nt-reference-action-grid">'+
  [['✓','Take Attendance','attendance'],['✎','Create Assignment','paper-generator'],['▤','Smart Notes','teaching'],['▣','School Calendar','school-calendar'],['◷','Timetable','schedules'],['◈','Assessments','assessments']].map(([icon,label,route])=>'<button type="button" class="nt-reference-action" data-link="'+route+'"><span>'+icon+'</span><b>'+label+'</b></button>').join('')+'</div></div>';
- const activityPanel=dash.querySelector('.nt-card .nt-activity');
+ const activityPanel=dash.querySelector('.nt-activity');
  if(activityPanel){const parent=activityPanel.closest('.nt-card');parent?.insertAdjacentElement('beforebegin',referencePanels);}
  else dash.append(referencePanels);
 
