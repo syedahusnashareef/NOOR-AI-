@@ -79,7 +79,7 @@ async function open(){
  v.innerHTML='<div class="pp-head"><div><small style="letter-spacing:2px;color:#9d657a">NOOR · TEACHER STUDIO</small><h1>Assignments & Weekly Papers</h1><p class="pp-sub">Generate from a textbook photo or short description. Customize before printing.</p></div><button class="pp-btn soft" id="ppBack">← Dashboard</button></div>'+
  '<div class="pp-layout"><div><section class="pp-card"><h2>✦ Generate a paper</h2><form id="ppForm" class="pp-fields">'+
   '<label class="wide">School Class & Section<select id="ppContext" required><option value="">Loading assigned school classes…</option></select></label>'+
- '<label>Paper type<select id="ppType">'+Object.entries(TYPE).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></label>'+
+ '<label class="wide">Subject name<input id="ppSubjectName" maxlength="100" placeholder="e.g. Science" required></label>'+ '<label>Paper type<select id="ppType">'+Object.entries(TYPE).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></label>'+
  '<label>Language<select id="ppLang">'+['English','Urdu','Hindi','Telugu','Arabic','Bilingual (English + Urdu)'].map(x=>'<option>'+x+'</option>').join('')+'</select></label>'+
  '<label>Number of questions<select id="ppCount">'+[5,8,10,15,20,25].map(x=>'<option '+(x===10?'selected':'')+'>'+x+'</option>').join('')+'</select></label>'+
  '<label>Difficulty<select id="ppDifficulty"><option value="easy">Easy</option><option value="balanced" selected>Balanced</option><option value="challenging">Challenging</option></select></label>'+
@@ -96,9 +96,9 @@ async function open(){
  $('#ppBack').onclick=()=>a().openView('overview');$('#ppForm').onsubmit=x=>{x.preventDefault();generate()};
  $('#ppQuestions').oninput=()=>$('#ppPreview').textContent=$('#ppQuestions').value;
  $('#ppAnswers').oninput=()=>$('#ppAnswerPreview').textContent=$('#ppAnswers').value;
- $('#ppSave').onclick=save;$('#ppPrint').onclick=print;
+ $('#ppContext').onchange=()=>{$('#ppSubjectName').value=paperContexts[Number($('#ppContext').value)]?.subject_name||''};$('#ppSave').onclick=save;$('#ppPrint').onclick=print;
   $('#ppPublish').onclick=publishAssignment;$('#ppShowInbox').onclick=()=>window.NOOR_ASSIGNMENT_PORTAL?.teacherInbox?.();
- await loadPaperContexts();await load();window.NOOR_ASSIGNMENT_PORTAL?.teacherInbox?.();
+ await loadPaperContexts();$('#ppContext').onchange?.();await load();window.NOOR_ASSIGNMENT_PORTAL?.teacherInbox?.();
 }
 async function generate(){
  if(waiting||!ready())return;
@@ -106,19 +106,20 @@ async function generate(){
  try{
  const photos=Array.from($('#ppImages').files||[]),description=$('#ppDescription').value.trim(),topic=$('#ppTopic').value.trim();
   const context=paperContexts[Number($('#ppContext').value)];if(!context)throw Error('Choose your assigned school class and section.');
+  const subjectName=context.subject_name||$('#ppSubjectName').value.trim();if(!subjectName)throw Error('Enter the paper subject.');
  if(!photos.length&&!description&&!topic)throw Error('Choose a photo OR add a short description or topic.');
  if(photos.length>8)throw Error('Maximum eight images per request.');
  let total=0;for(const f of photos){if(!['image/jpeg','image/png','image/webp'].includes(f.type))throw Error('Use JPG, PNG or WebP photos.');if(f.size>4*1024*1024)throw Error('Each photo must be under 4 MB.');total+=f.size;}
  if(total>12*1024*1024)throw Error('Choose fewer or smaller photos.');
  const images=await Promise.all(photos.map(readFile));
  const req=await a().db.functions.invoke('noor-ai-academic-assistant',{body:{
- action:'paper',school_id:a().schoolId,topic,rough_text:description,images,...context,
+ action:'paper',school_id:a().schoolId,topic,rough_text:description,images,...context,subject_name:subjectName,
  paper_type:$('#ppType').value,language:$('#ppLang').value,difficulty:$('#ppDifficulty').value,
  question_count:Number($('#ppCount').value),marks_per_question:Number($('#ppMarks').value)
  }});
  if(req.error||req.data?.error)throw Error(req.data?.error||req.error?.message||'AI paper generation failed.');
  const o=req.data?.output;if(!o||!Array.isArray(o.questions)||!o.questions.length)throw Error('No questions generated. Try a clearer photo or description.');
- output=o;draftId=null;display(o.title||TYPE[$('#ppType').value],paperText(o),answerText(o));
+ output=o;draftId=null;display(o.title||TYPE[$('#ppType').value],paperText(o),answerText(o));$('#ppTotalMarks').value=String(Number($('#ppCount').value)*Number($('#ppMarks').value));
  status('✓ AI draft generated. Review and edit as needed.');a().toast?.('Paper generated.','success');
  }catch(err){status('Unable to generate: '+(err?.message||'Please retry.'))}
  finally{waiting=false;$('#ppGenerate').disabled=false}
@@ -127,6 +128,7 @@ async function publishAssignment(){
  const app=a(),context=paperContexts[Number($('#ppContext').value)],title=$('#ppTitle').value.trim()||TYPE[$('#ppType').value],body=$('#ppQuestions').value.trim();
  const due_at=$('#ppDueAt').value,max_marks=Number($('#ppTotalMarks').value),btn=$('#ppPublish');
  if(!context)return status('Choose your assigned school class/section.');
+ if(!($('#ppSubjectName').value.trim()||context.subject_name))return status('Enter a subject before publishing.');
  if(!body)return status('Generate and review the questions first.');
  if(!due_at||!Number.isFinite(new Date(due_at).getTime())||new Date(due_at)<=new Date())return status('Select a future due date and time.');
  if(!Number.isInteger(max_marks)||max_marks<1||max_marks>1000)return status('Total marks must be between 1 and 1000.');
@@ -146,7 +148,7 @@ async function save(){
  const title=$('#ppTitle').value.trim()||TYPE[$('#ppType').value],row={
  school_id:a().schoolId,teacher_id:a().user.id,title:title.slice(0,180),paper_type:$('#ppType').value,class_id:context.class_id,section_id:context.section_id,subject_id:context.subject_id,
  language:$('#ppLang').value,source_description:$('#ppDescription').value.slice(0,10000),
- content:{...(output||{}),paper_text:paper,answer_key_text:answer,teacher_edited:true},updated_at:new Date().toISOString()
+ content:{...(output||{}),paper_text:paper,answer_key_text:answer,teacher_subject_name:$('#ppSubjectName').value.trim(),teacher_edited:true},updated_at:new Date().toISOString()
  };
  $('#ppSave').disabled=true;
  try{
@@ -173,7 +175,7 @@ async function print(){
   '<h1 style="font:700 21pt Georgia,serif;margin:7px 0">'+e(schoolName)+'</h1>'+
   '<h2 style="font-size:12pt;margin:4px 0">'+e($('#ppTitle').value||TYPE[$('#ppType').value]||'Question Paper')+'</h2>'+
   '<p style="font-size:10pt">Class: '+e(ctx.class_name||'________________')+' · Section: '+e(ctx.section_name||'______')+
-  ' · Subject: '+e(ctx.subject_name||'________________')+' · Date: '+e(new Date().toLocaleDateString('en-IN'))+'</p></header>';
+  ' · Subject: '+e(ctx.subject_name||$('#ppSubjectName')?.value||'________________')+' · Date: '+e(new Date().toLocaleDateString('en-IN'))+'</p></header>';
  el.innerHTML=head+'<p style="font-size:10pt">Student Name: _______________________ &nbsp; Roll Number: ___________</p>'+
   '<pre>'+e(questions)+'</pre>'+
   ($('#ppWithAnswers').checked?'<hr><h2>Teacher-only answer key (confidential)</h2><pre>'+e($('#ppAnswers').value)+'</pre>':'')+
@@ -186,7 +188,7 @@ async function load(){
  if(r.error){box.textContent='Could not load drafts: '+r.error.message;return}
  const rows=r.data||[];
  box.innerHTML=rows.length?rows.map(x=>'<div><div><strong>'+e(x.title)+'</strong><small>'+e(TYPE[x.paper_type]||'Paper')+' · '+e(new Date(x.updated_at).toLocaleDateString('en-IN'))+'</small></div><button class="pp-btn soft" data-paper="'+e(x.id)+'">Edit</button></div>').join(''):'<p class="pp-sub">No saved papers yet.</p>';
- box.onclick=ev=>{const b=ev.target.closest('[data-paper]');if(!b)return;const item=rows.find(x=>x.id===b.dataset.paper);if(!item)return;draftId=item.id;output=item.content||{};$('#ppType').value=item.paper_type;$('#ppLang').value=item.language;const i=paperContexts.findIndex(x=>x.class_id===item.class_id&&x.section_id===(item.section_id||null)&&x.subject_id===(item.subject_id||null));if(i>=0)$('#ppContext').value=String(i);display(item.title,item.content?.paper_text||paperText(item.content),item.content?.answer_key_text||answerText(item.content));status('Saved paper loaded for editing.');$('#ppQuestions').scrollIntoView({behavior:'smooth',block:'center'})};
+ box.onclick=ev=>{const b=ev.target.closest('[data-paper]');if(!b)return;const item=rows.find(x=>x.id===b.dataset.paper);if(!item)return;draftId=item.id;output=item.content||{};$('#ppType').value=item.paper_type;$('#ppLang').value=item.language;const i=paperContexts.findIndex(x=>x.class_id===item.class_id&&x.section_id===(item.section_id||null)&&x.subject_id===(item.subject_id||null));if(i>=0)$('#ppContext').value=String(i);$('#ppSubjectName').value=item.content?.teacher_subject_name||paperContexts[i]?.subject_name||'';display(item.title,item.content?.paper_text||paperText(item.content),item.content?.answer_key_text||answerText(item.content));status('Saved paper loaded for editing.');$('#ppQuestions').scrollIntoView({behavior:'smooth',block:'center'})};
 }
 window.NOOR_PAPER_GENERATOR={open};
 })();
