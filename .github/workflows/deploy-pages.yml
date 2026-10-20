@@ -67,10 +67,25 @@ jobs:
         uses: actions/upload-pages-artifact@v4
         with:
           path: _site
+          name: github-pages-${{ github.run_attempt }}
+
+      - name: Wait for the uploaded Pages artifact to be visible
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            found=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" --jq '.artifacts | any(.name == "github-pages-${{ github.run_attempt }}")')
+            if [ "$found" = "true" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "Pages artifact metadata is not available yet. Retry this job."
+          exit 1
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
       - name: Install headless browser
         run: |
