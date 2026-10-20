@@ -92,12 +92,13 @@ async function open(){
  '<label style="margin-top:12px">Questions<textarea rows="17" id="ppQuestions"></textarea></label>'+
  '<label style="margin-top:12px">Teacher answer key<textarea rows="8" id="ppAnswers"></textarea></label>'+
  '<div class="pp-actions"><button class="pp-btn" id="ppSave">Save draft</button><button class="pp-btn soft" id="ppPrint">Print / Save PDF</button><label style="display:flex;align-items:center;gap:4px"><input id="ppWithAnswers" style="width:auto" type="checkbox"> Include answers</label></div>'+
- '<h2>Paper preview</h2><div class="pp-preview" id="ppPreview">Your paper will appear here.</div><details style="margin-top:11px"><summary>Teacher-only answer key</summary><div class="pp-preview" id="ppAnswerPreview"></div></details></section></div>';
+ '<div class="pp-card" style="margin-top:15px;padding:14px"><h2>Publish to assigned students</h2><p class="pp-sub">This sends questions only — the answer key remains private.</p><label>Due date and time<input type="datetime-local" id="ppDueAt"></label><label style="margin-top:9px">Total marks<input id="ppTotalMarks" type="number" min="1" max="1000" value="20"></label><div class="pp-actions"><button class="pp-btn" id="ppPublish" type="button">Publish Assignment</button><button class="pp-btn soft" id="ppShowInbox" type="button">Refresh Submissions</button></div><div id="ppPublished" class="pp-list"></div></div>'+ '<h2>Paper preview</h2><div class="pp-preview" id="ppPreview">Your paper will appear here.</div><details style="margin-top:11px"><summary>Teacher-only answer key</summary><div class="pp-preview" id="ppAnswerPreview"></div></details></section></div>';
  $('#ppBack').onclick=()=>a().openView('overview');$('#ppForm').onsubmit=x=>{x.preventDefault();generate()};
  $('#ppQuestions').oninput=()=>$('#ppPreview').textContent=$('#ppQuestions').value;
  $('#ppAnswers').oninput=()=>$('#ppAnswerPreview').textContent=$('#ppAnswers').value;
  $('#ppSave').onclick=save;$('#ppPrint').onclick=print;
- await loadPaperContexts();await load();
+  $('#ppPublish').onclick=publishAssignment;$('#ppShowInbox').onclick=()=>window.NOOR_ASSIGNMENT_PORTAL?.teacherInbox?.();
+ await loadPaperContexts();await load();window.NOOR_ASSIGNMENT_PORTAL?.teacherInbox?.();
 }
 async function generate(){
  if(waiting||!ready())return;
@@ -121,6 +122,22 @@ async function generate(){
  status('✓ AI draft generated. Review and edit as needed.');a().toast?.('Paper generated.','success');
  }catch(err){status('Unable to generate: '+(err?.message||'Please retry.'))}
  finally{waiting=false;$('#ppGenerate').disabled=false}
+}
+async function publishAssignment(){
+ const app=a(),context=paperContexts[Number($('#ppContext').value)],title=$('#ppTitle').value.trim()||TYPE[$('#ppType').value],body=$('#ppQuestions').value.trim();
+ const due_at=$('#ppDueAt').value,max_marks=Number($('#ppTotalMarks').value),btn=$('#ppPublish');
+ if(!context)return status('Choose your assigned school class/section.');
+ if(!body)return status('Generate and review the questions first.');
+ if(!due_at||!Number.isFinite(new Date(due_at).getTime())||new Date(due_at)<=new Date())return status('Select a future due date and time.');
+ if(!Number.isInteger(max_marks)||max_marks<1||max_marks>1000)return status('Total marks must be between 1 and 1000.');
+ if(!window.NOOR_ASSIGNMENT_PORTAL?.publish)return status('Assignment service unavailable; reload and try again.');
+ btn.disabled=true;status('Publishing to your assigned students…');
+ try{
+  await window.NOOR_ASSIGNMENT_PORTAL.publish({title,body,context,due_at,max_marks,paper_draft_id:draftId});
+  status('✓ Assignment published for the selected school/class/section. Students can now access it.');
+  await window.NOOR_ASSIGNMENT_PORTAL.teacherInbox();
+ }catch(err){status('Publish failed: '+(err.message||'Please retry.'))}
+ finally{btn.disabled=false}
 }
 async function save(){
  if(!ready())return;const paper=$('#ppQuestions').value.trim(),answer=$('#ppAnswers').value.trim();
