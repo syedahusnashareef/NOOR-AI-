@@ -29,6 +29,12 @@ async function open(){
  const list=document.getElementById('naList');if(!list)return;
  if(assignments.error||submissions.error){list.textContent='Could not load assignments: '+(assignments.error||submissions.error).message;return}
  const rows=assignments.data||[],submitted=new Map((submissions.data||[]).map(s=>[s.assignment_id,s]));
+ const resourceResult=await app.db.from('noor_teacher_resource_links').select('id,title,resource_url,created_at').eq('school_id',app.schoolId).eq('class_id',p.class_id).eq('visibility','students').order('created_at',{ascending:false}).limit(40);
+ const resources=resourceResult.data||[];
+ root.querySelector('.na-wrap').insertAdjacentHTML('beforeend','<section class="na-card"><h2>Class Resource Library</h2>'+
+  (resourceResult.error?'<p class="na-muted">Resources unavailable: '+E(resourceResult.error.message)+'</p>':resources.length?
+  resources.map(x=>'<p><a target="_blank" rel="noopener noreferrer" href="'+E(x.resource_url)+'">▣ '+E(x.title)+'</a></p>').join(''):
+  '<p class="na-muted">No learning resources published for your class yet.</p>')+'</section>');
  if(!rows.length){list.innerHTML='<p class="na-muted">No assignments published for your class yet.</p>';return}
  list.outerHTML='<div id="naList">'+rows.map(x=>{
   const submission=submitted.get(x.id),late=new Date(x.due_at)<new Date();
