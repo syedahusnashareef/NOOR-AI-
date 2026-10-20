@@ -44,7 +44,7 @@ const css=document.createElement('style');css.textContent=[
 const $=s=>view()?.querySelector(s);
 const say=(s,bad=false)=>{const n=$('#taMessage');if(n){n.textContent=s;n.classList.toggle('ta-error',bad)}};
 function assignedSections(klass){const a=st.assignments.filter(x=>x.class_id===klass);return a.some(x=>!x.section_id)?st.sections.filter(x=>x.class_id===klass):st.sections.filter(x=>x.class_id===klass&&a.some(t=>t.section_id===x.id));}
-function chooseSections(){const c=$('#taClass')?.value;const all=st.assignments.some(x=>x.class_id===c&&!x.section_id);$('#taSection').innerHTML=(all?'<option value="">Entire class</option>':'<option value="">Choose section</option>')+assignedSections(c).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('');if(!all&&assignedSections(c).length)$('#taSection').value=assignedSections(c)[0].id;}
+function chooseSections(){const c=$('#taClass')?.value;const all=st.assignments.some(x=>x.class_id===c&&!x.section_id);$('#taSection').innerHTML=(assignedSections(c).length?'<option value="">Choose section</option>':'<option value="">No sections (entire class)</option>')+assignedSections(c).map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('');if(assignedSections(c).length)$('#taSection').value=assignedSections(c)[0].id;}
 function tally(){let p=0,a=0,l=0;st.students.forEach(x=>{if(st.marks[x.id]==='present')p++;if(st.marks[x.id]==='absent')a++;if(st.marks[x.id]==='late')l++;});return {p,a,l,missing:st.students.length-p-a-l};}
 function refreshTotals(){const t=tally();[['pending',t.missing],['present',t.p],['absent',t.a],['late',t.l]].forEach(([k,n])=>{const el=$('[data-total="'+k+'"]');if(el)el.textContent=n});const bottom=$('#taBottomTotals');if(bottom)bottom.textContent='Total '+st.students.length+'  •  Present '+t.p+'  •  Absent '+t.a+'  •  Late '+t.l+'  •  Unmarked '+t.missing;const b=$('#taSave');if(b)b.disabled=st.busy||!st.students.length||t.missing!==0;}
 function showStudents(){const search=$('#taSearch')?.value?.toLowerCase().trim()||'';$('#taRows').innerHTML=st.students.filter(x=>!search||x.full_name?.toLowerCase().includes(search)||String(x.roll_number||'').toLowerCase().includes(search)).map(x=>'<div class="ta-row" data-row="'+esc(x.id)+'"><span class="ta-avatar">'+esc((x.full_name||'S')[0])+'</span><div class="ta-name"><b>'+esc(x.full_name)+'</b><small>Roll number '+esc(x.roll_number||'Not assigned')+'</small></div><div class="ta-buttons" role="group" aria-label="Attendance of '+esc(x.full_name)+'">'+['present','absent','late'].map((a,i)=>'<button type="button" data-id="'+esc(x.id)+'" data-status="'+a+'" aria-pressed="'+(st.marks[x.id]===a)+'">'+['✓ Present','✕ Absent','◷ Late'][i]+'</button>').join('')+'</div></div>').join('')||'<p class="ta-muted">No matching students.</p>';}
@@ -79,13 +79,13 @@ async function open(){
 async function load(){
  const a=api(),db=a.db,version=++st.version,school=a.schoolId,c=$('#taClass')?.value,section=$('#taSection')?.value||null,date=$('#taDate')?.value;
  if(!c||!date)return;
- if(!section&&!st.assignments.some(x=>x.class_id===c&&!x.section_id))return say('Choose your assigned section first.',true);
+ if(!section&&(st.sections.some(x=>x.class_id===c)||!st.assignments.some(x=>x.class_id===c&&!x.section_id)))return say('Choose your assigned section first.',true);
  if(date>dateNow())return say('Cannot mark future attendance.',true);
  $('#taRows').textContent='Loading enrolled students…';say('');
  let sesQuery=db.from('attendance_sessions').select('id,status').eq('school_id',school).eq('class_id',c).eq('attendance_date',date);
  sesQuery=section?sesQuery.eq('section_id',section):sesQuery.is('section_id',null);
  let studentQuery=db.from('profiles').select('id,full_name,roll_number').eq('school_id',school).eq('class_id',c).eq('role','student').eq('status','active').limit(1000);
- if(section)studentQuery=studentQuery.eq('section_id',section);
+ studentQuery=section?studentQuery.eq('section_id',section):studentQuery.is('section_id',null);
  const [rs,ss]=await Promise.all([studentQuery,sesQuery.limit(1)]);
  if(version!==st.version)return;
  if(rs.error||ss.error){$('#taRows').textContent='Unable to load roster.';say((rs.error||ss.error).message,true);return;}
@@ -106,15 +106,15 @@ async function save(){
  st.busy=true;refreshTotals();say('Saving '+st.students.length+' attendance marks as one transaction…');
  try{
   const marks=st.students.map(student=>({student_id:student.id,status:st.marks[student.id]}));
-  const result=await current.db.rpc('noor_submit_attendance_atomic',{
+  const result=await current.db.rpc('noor_submit_class_attendance',{
    p_school_id:current.schoolId,p_class_id:class_id,p_section_id:section_id,
    p_attendance_date:attendance_date,p_marks:marks
   });
   if(result.error)throw result.error;
-  if(!result.data?.session_id||Number(result.data.saved)!==st.students.length)throw new Error('Server did not confirm the entire class was saved.');
+  if(!result.data?.session_id||Number(result.data.count)!==st.students.length)throw new Error('Server did not confirm the entire class was saved.');
   st.session={id:result.data.session_id,status:result.data.status};
   $('#taDayInfo').textContent=st.students.length+' students • '+attendance_date+' • '+result.data.status;
-  say('✓ All '+result.data.saved+' marks saved together: '+t.p+' Present · '+t.a+' Absent · '+t.l+' Late');
+  say('✓ All '+result.data.count+' marks saved together: '+t.p+' Present · '+t.a+' Absent · '+t.l+' Late');
   current.toast?.('Complete attendance saved securely.','success');
   try{await alerts(st.version)}catch(err){console.warn('Attendance saved, but alerts could not refresh',err)}
  }catch(err){
