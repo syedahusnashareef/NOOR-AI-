@@ -29,9 +29,9 @@ function classOptions(){
 function sectionOptions(){
  const classId=$('#ntAttClass').value,as=model.assignments.filter(x=>x.class_id===classId);
  const all=as.some(x=>!x.section_id),available=model.sections.filter(x=>x.class_id===classId&&(all||as.some(y=>y.section_id===x.id)));
- $('#ntAttSection').innerHTML=(all?'<option value="">All sections</option>':'<option value="">Choose section</option>')+
+ $('#ntAttSection').innerHTML=(available.length?'<option value="">Choose section</option>':'<option value="">No sections (entire class)</option>')+
  available.map(x=>'<option value="'+E(x.id)+'">'+E(x.name)+'</option>').join('');
- if(!all&&available.length)$('#ntAttSection').value=available[0].id;
+ if(available.length)$('#ntAttSection').value=available[0].id;
 }
 function table(){
  const box=$('#ntAttTable'),students=model.students;
@@ -77,11 +77,11 @@ async function loadRoster(){
  const classId=$('#ntAttClass').value,sectionId=$('#ntAttSection').value||null,date=$('#ntAttDate').value;
  if(!classId||!date)return;
  const all=m.assignments.some(x=>x.class_id===classId&&!x.section_id);
- if(!all&&!sectionId){say('Choose your assigned section.',true);return}
+ if((!all||m.sections.some(x=>x.class_id===classId))&&!sectionId){say('Choose your assigned section.',true);return}
  if(date>day()){say('Attendance cannot be marked for a future date.',true);return}
  $('#ntAttTable').innerHTML='<p class="nt-muted">Reading enrolled student records…</p>';
  let q=a.db.from('profiles').select('id,full_name,roll_number').eq('school_id',a.schoolId).eq('role','student').eq('status','active').eq('class_id',classId).limit(1000);
- if(sectionId)q=q.eq('section_id',sectionId);
+ q=sectionId?q.eq('section_id',sectionId):q.is('section_id',null);
  let ses=a.db.from('attendance_sessions').select('id,status').eq('school_id',a.schoolId).eq('class_id',classId).eq('attendance_date',date);
  ses=sectionId?ses.eq('section_id',sectionId):ses.is('section_id',null);
  const [users,sessions]=await Promise.all([q,ses.limit(1)]);
@@ -104,20 +104,10 @@ async function save(){
  const a=APP(),db=a.db,classId=$('#ntAttClass').value,sectionId=$('#ntAttSection').value||null,attendance_date=$('#ntAttDate').value,m=model;
  working=true;stats();say('Saving attendance securely…');
  try{
- let session=m.session;
- if(!session){
- const newSession=await db.from('attendance_sessions').insert({school_id:a.schoolId,class_id:classId,section_id:sectionId,attendance_date,status:'draft',taken_by:a.user.id}).select('id,status').single();
- if(newSession.error?.code==='23505'){
- let q=db.from('attendance_sessions').select('id,status').eq('school_id',a.schoolId).eq('class_id',classId).eq('attendance_date',attendance_date);
- q=sectionId?q.eq('section_id',sectionId):q.is('section_id',null);const r=await q.single();if(r.error)throw r.error;session=r.data;
- }else{if(newSession.error)throw newSession.error;session=newSession.data}
- }
- const rows=m.students.map(x=>({school_id:a.schoolId,session_id:session.id,student_id:x.id,status:m.selection[x.id],marked_by:a.user.id,marked_at:new Date().toISOString()}));
- const up=await db.from('attendance_records').upsert(rows,{onConflict:'session_id,student_id'});
- if(up.error)throw up.error;
- const done=await db.from('attendance_sessions').update({status:'submitted',submitted_at:new Date().toISOString()}).eq('school_id',a.schoolId).eq('id',session.id);
- if(done.error)throw done.error;
- m.session={id:session.id,status:'submitted'};say('✓ Saved '+n.present+' Present, '+n.absent+' Absent and '+n.late+' Late to school records.');a.toast?.('Student attendance submitted.','success');
+ const result=await db.rpc('noor_submit_class_attendance',{p_school_id:a.schoolId,p_class_id:classId,p_section_id:sectionId,p_attendance_date:attendance_date,p_marks:m.students.map(x=>({student_id:x.id,status:m.selection[x.id]}))});
+ if(result.error)throw result.error;
+ if(!result.data?.session_id||Number(result.data.count)!==m.students.length)throw Error('The database did not confirm the complete roster.');
+ m.session={id:result.data.session_id,status:result.data.status};say('✓ Saved '+n.present+' Present, '+n.absent+' Absent and '+n.late+' Late to school records.');a.toast?.('Student attendance submitted.','success');
  await checkAbsences(revision);
  }catch(err){say('Attendance not fully submitted: '+(err.message||'Retry after checking permissions.'),true)}
  finally{working=false;stats()}
