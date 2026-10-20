@@ -2,7 +2,7 @@
 (()=>{'use strict';
 const a=()=>window.NOOR_AI_APP||{},e=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TYPE={assignment:'Assignment',weekly_test:'Weekly Paper',practice:'Practice Worksheet',quiz:'Quiz'};
-let v=null,draftId=null,output=null,waiting=false;
+let v=null,draftId=null,output=null,waiting=false,paperContexts=[];
 const style=document.createElement('style');style.textContent=[
 '#view-paper-generator{--p:#60283e;--ink:#3a2730;color:var(--ink);max-width:1200px;margin:auto}',
 '#view-paper-generator .pp-head{display:flex;align-items:start;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:18px}',
@@ -111,12 +111,27 @@ async function save(){
  }catch(err){status('Could not save paper: '+(err?.message||'Unknown error'))}
  finally{$('#ppSave').disabled=false}
 }
-function print(){
- const text=$('#ppQuestions').value;if(!text.trim())return status('Create or open a paper before printing.');
+async function print(){
+ const questions=$('#ppQuestions').value;if(!questions.trim())return status('Create or open a paper before printing.');
+ let schoolName=a().school?.name||'',schoolLogo=a().school?.logo_url||'';
+ try{
+  const r=await a().db.from('school_directory').select('name,logo_url').eq('id',a().schoolId).single();
+  if(!r.error&&r.data){schoolName=r.data.name;schoolLogo=r.data.logo_url||schoolLogo}
+ }catch(err){console.warn('School branding request failed',err)}
+ if(!schoolName)return status('School branding unavailable. Reopen your school account.');
  let el=document.getElementById('noorPaperPrint');
  if(!el){el=document.createElement('div');el.id='noorPaperPrint';document.body.append(el)}
- el.innerHTML='<h1>'+e($('#ppTitle').value||'NOOR Assignment')+'</h1><pre>'+e(text)+'</pre>'+
- ($('#ppWithAnswers').checked?'<hr><h2>Teacher answer key</h2><pre>'+e($('#ppAnswers').value)+'</pre>':'');
+ const safeLogo=/^https:\/\//i.test(schoolLogo||'')?'<img alt="School crest" src="'+e(schoolLogo)+'" style="max-width:90px;max-height:75px;object-fit:contain">':'';
+ const ctx=paperContexts[Number($('#ppContext')?.value)]||{};
+ const head='<header style="text-align:center;border-bottom:2px solid #54243b;padding-bottom:12px;margin-bottom:15px">'+safeLogo+
+  '<h1 style="font:700 21pt Georgia,serif;margin:7px 0">'+e(schoolName)+'</h1>'+
+  '<h2 style="font-size:12pt;margin:4px 0">'+e($('#ppTitle').value||TYPE[$('#ppType').value]||'Question Paper')+'</h2>'+
+  '<p style="font-size:10pt">Class: '+e(ctx.class_name||'________________')+' · Section: '+e(ctx.section_name||'______')+
+  ' · Subject: '+e(ctx.subject_name||'________________')+' · Date: '+e(new Date().toLocaleDateString('en-IN'))+'</p></header>';
+ el.innerHTML=head+'<p style="font-size:10pt">Student Name: _______________________ &nbsp; Roll Number: ___________</p>'+
+  '<pre>'+e(questions)+'</pre>'+
+  ($('#ppWithAnswers').checked?'<hr><h2>Teacher-only answer key (confidential)</h2><pre>'+e($('#ppAnswers').value)+'</pre>':'')+
+  '<footer style="margin-top:30px;text-align:center;font:9pt Arial;color:#777">Powered by NOOR School Management</footer>';
  window.print();
 }
 async function load(){
