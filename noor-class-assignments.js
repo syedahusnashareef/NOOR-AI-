@@ -76,8 +76,11 @@ async function teacherInbox(){
   panel.textContent='Loading student responses…';
   const data=await app.db.from('noor_assignment_submissions').select('id,student_id,answer_text,marks_obtained,feedback,graded_at').eq('school_id',app.schoolId).eq('assignment_id',asg.id).limit(500);
   if(data.error){panel.textContent=data.error.message;return}
+  const studentIds=[...new Set((data.data||[]).map(x=>x.student_id))];
+  const profiles=studentIds.length?await app.db.from('profiles').select('id,full_name,roll_number').eq('school_id',app.schoolId).in('id',studentIds):{data:[],error:null};
+  const studentNames=new Map((profiles.data||[]).map(x=>[x.id,x.full_name+(x.roll_number?' · Roll '+x.roll_number:'')]));
   panel.innerHTML=(data.data||[]).map(sub=>'<section style="border-top:1px solid #ead7df;padding:10px 0" data-mark="'+E(sub.id)+'">'+
-   '<b>Student record: '+E(sub.student_id.slice(0,8))+'</b><p style="white-space:pre-wrap">'+E(sub.answer_text)+'</p>'+
+   '<b>'+E(studentNames.get(sub.student_id)||'Student record')+'</b><p style="white-space:pre-wrap">'+E(sub.answer_text)+'</p>'+
    '<label>Marks (max '+E(asg.max_marks)+')<input type="number" min="0" max="'+E(asg.max_marks)+'" step=".5" data-score value="'+E(sub.marks_obtained??'')+'"></label>'+
    '<label>Feedback<input data-feedback value="'+E(sub.feedback||'')+'"></label><button type="button" class="na-btn" data-grade>Save grade</button></section>').join('')||'<p>No student submissions yet.</p>';
   panel.querySelectorAll('[data-grade]').forEach(btn=>btn.onclick=async()=>{
