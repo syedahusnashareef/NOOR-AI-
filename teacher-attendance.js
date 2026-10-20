@@ -56,11 +56,11 @@ async function open(){
  '<div class="ta-panel"><div class="ta-fields"><label>Assigned class<select id="taClass"></select></label><label>Section<select id="taSection"></select></label><label>Date<input id="taDate" type="date" max="'+dateNow()+'" value="'+dateNow()+'"></label></div></div>'+
  '<div class="ta-panel"><div class="ta-summary"><div class="ta-stat"><b data-total="pending">0</b>Not marked</div><div class="ta-stat present"><b data-total="present">0</b>Present</div><div class="ta-stat absent"><b data-total="absent">0</b>Absent</div><div class="ta-stat late"><b data-total="late">0</b>Late</div></div></div>'+
  '<div class="ta-panel"><div class="ta-tools"><div><h3 style="margin:0">Class roster</h3><span class="ta-muted" id="taDayInfo">Loading students…</span></div><div class="ta-tools"><input style="max-width:170px" id="taSearch" type="search" placeholder="Find name or roll"><button class="ta-soft" id="taAllPresent" type="button">✓ All present</button></div></div><div id="taRows" aria-live="polite"></div><p id="taBottomTotals" class="ta-muted" aria-live="polite"></p><div class="ta-foot"><div><p id="taMessage" role="status"></p><small class="ta-muted">Mark every student before saving to the school database.</small></div><button id="taSave" class="ta-primary" disabled>Save attendance →</button></div></div>'+
- '<div class="ta-panel"><h3>Repeated-absence alerts</h3><p class="ta-muted">Students with 3+ consecutive absences across submitted school sessions (not calendar days).</p><div id="taAlerts">Checking attendance history…</div></div></div>';
+ '<div class="ta-panel ta-offline-panel"><div class="ta-tools"><div><h3>Online / Offline Attendance</h3><p class="ta-muted">Offline drafts are saved on this device only. Principal sees them AFTER manual sync.</p><p id="taOfflineCount" role="status"></p></div><button type="button" class="ta-soft" id="taSyncDrafts">Sync drafts to Principal</button></div></div>'+ '<div class="ta-panel"><h3>Repeated-absence alerts</h3><p class="ta-muted">Students with 3+ consecutive absences across submitted school sessions (not calendar days).</p><div id="taAlerts">Checking attendance history…</div></div></div>';
  $('#taBack').onclick=()=>a.openView('overview');$('#taClass').onchange=()=>{chooseSections();load()};$('#taSection').onchange=load;$('#taDate').onchange=load;
  $('#taRows').onclick=e=>{const b=e.target.closest('[data-id][data-status]');if(b)selectMark(b.dataset.id,b.dataset.status);};
  $('#taAllPresent').onclick=()=>{st.students.forEach(x=>{st.marks[x.id]='present'});showStudents();refreshTotals();say('All marked Present. Please review before submission.');};
- $('#taSearch').oninput=showStudents;$('#taSave').onclick=save;
+ $('#taSearch').oninput=showStudents;$('#taSave').onclick=save;$('#taSyncDrafts').onclick=syncDrafts;refreshDrafts();
  const db=a.db,assigned=await db.from('teacher_assignments').select('class_id,section_id').eq('school_id',a.schoolId).eq('teacher_id',a.user.id).eq('is_active',true);
  if(assigned.error){say('Could not load your assigned classes: '+assigned.error.message,true);return;}
  st.assignments=assigned.data||[];
@@ -99,6 +99,15 @@ async function load(){
  $('#taDayInfo').textContent=st.students.length+' students • '+date+' • '+(st.session?.status||'not submitted');
  showStudents();refreshTotals();await alerts(version);
 }
+async function refreshDrafts(){
+ try{const drafts=await window.NOOR_OFFLINE_ATTENDANCE?.all?.()||[];const node=$('#taOfflineCount');if(node)node.textContent=drafts.length?drafts.length+' draft(s) pending ONLY on this device.':'No pending offline attendance drafts.';}
+ catch(e){if($('#taOfflineCount'))$('#taOfflineCount').textContent='Offline storage unavailable: '+e.message}
+}
+async function syncDrafts(){
+ const btn=$('#taSyncDrafts');btn.disabled=true;say('Checking your authenticated session and syncing…');
+ try{const results=await window.NOOR_OFFLINE_ATTENDANCE.sync(),fail=results.filter(x=>!x.ok);say(fail.length?'Synced '+(results.length-fail.length)+'; '+fail.length+' need correction: '+fail[0].error:results.length?'✓ All '+results.length+' offline class drafts submitted to Principal.':'No drafts pending.',Boolean(fail.length));await refreshDrafts();}
+ catch(err){say('Offline sync failed: '+err.message,true)}finally{btn.disabled=false}
+}
 async function save(){
  if(st.busy)return;
  const current=api(),t=tally(),class_id=$('#taClass').value,section_id=$('#taSection').value||null,attendance_date=$('#taDate').value;
@@ -106,19 +115,25 @@ async function save(){
  st.busy=true;refreshTotals();say('Saving '+st.students.length+' attendance marks as one transaction…');
  try{
   const marks=st.students.map(student=>({student_id:student.id,status:st.marks[student.id]}));
+  const draft={class_id,section_id,attendance_date,marks};
+  if(navigator.onLine===false){await window.NOOR_OFFLINE_ATTENDANCE.queue(draft);say('◷ Saved on this device only. Principal has NOT received attendance. Sync once online.');await refreshDrafts();return;}
   const result=await current.db.rpc('noor_submit_class_attendance',{
    p_school_id:current.schoolId,p_class_id:class_id,p_section_id:section_id,
    p_attendance_date:attendance_date,p_marks:marks
   });
   if(result.error)throw result.error;
   if(!result.data?.session_id||Number(result.data.count)!==st.students.length)throw new Error('Server did not confirm the entire class was saved.');
+  await window.NOOR_OFFLINE_ATTENDANCE?.discard?.(draft).catch(()=>{});await refreshDrafts();
   st.session={id:result.data.session_id,status:result.data.status};
   $('#taDayInfo').textContent=st.students.length+' students • '+attendance_date+' • '+result.data.status;
   say('✓ All '+result.data.count+' marks saved together: '+t.p+' Present · '+t.a+' Absent · '+t.l+' Late');
   current.toast?.('Complete attendance saved securely.','success');
   try{await alerts(st.version)}catch(err){console.warn('Attendance saved, but alerts could not refresh',err)}
  }catch(err){
-  say('Nothing partially submitted. '+(err?.message||'Attendance could not be saved.')+' Check connection and retry.',true);
+  if(window.NOOR_OFFLINE_ATTENDANCE?.isNetworkFailure?.(err)){
+   try{await window.NOOR_OFFLINE_ATTENDANCE.queue({class_id,section_id,attendance_date,marks:st.students.map(x=>({student_id:x.id,status:st.marks[x.id]}))});say('◷ Offline draft saved on this device ONLY. It has NOT reached Principal. Sync later.');await refreshDrafts();}
+   catch(storageError){say('Not saved to server or device: '+storageError.message,true)}
+  }else say('Attendance NOT submitted: '+(err?.message||'Please verify your class permissions.')+' Retry.',true);
  }finally{st.busy=false;refreshTotals()}
 }
 async function alerts(version){
