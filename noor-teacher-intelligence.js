@@ -36,7 +36,7 @@ async function mount(ctx){
  if(!assignments.length){slot.innerHTML+='<div class="nti-banner">Your Principal has not assigned any class yet. Class-specific analytics will appear after assignment.</div>'}
  const classIds=[...new Set(assignments.map(a=>a.class_id))],day=today();
  const schoolFilter=()=>db.from('noor_class_assignments').select('id,title,class_id,section_id,due_at,max_marks,status').eq('school_id',school).eq('teacher_id',user).eq('status','published').order('due_at',{ascending:true}).limit(120);
- const [schoolAssignments,unitRows,progressRows,yearRows,subjectRows,classRows,logs,resources,assessments]=await Promise.all([
+ const [schoolAssignments,unitRows,progressRows,yearRows,subjectRows,classRows,logs,resources,assessments,supportRows,studentRows,substituteRows]=await Promise.all([
   safeQuery(schoolFilter()),
   classIds.length?safeQuery(db.from('syllabus_units').select('id,class_id,section_id,subject_id,title,academic_year_id').eq('school_id',school).eq('is_active',true).in('class_id',classIds).limit(900)):Promise.resolve({data:[]}),
   safeQuery(db.from('syllabus_progress').select('syllabus_unit_id,teacher_id,progress_status,teacher_reported_percentage').eq('school_id',school).eq('teacher_id',user).limit(900)),
@@ -45,7 +45,10 @@ async function mount(ctx){
   classIds.length?safeQuery(db.from('classes').select('id,name').eq('school_id',school).in('id',classIds).limit(150)):Promise.resolve({data:[]}),
   safeQuery(db.from('noor_teacher_lesson_logs').select('id,period_id,class_date,topic,homework,reflection,exit_ticket').eq('school_id',school).eq('teacher_id',user).eq('class_date',day).limit(40)),
   safeQuery(db.from('noor_teacher_resource_links').select('id,title,resource_url,visibility,class_id,section_id,created_at').eq('school_id',school).eq('teacher_id',user).order('created_at',{ascending:false}).limit(16)),
-  safeQuery(db.from('school_assessments').select('id,class_id,section_id,subject_id,max_marks,assessment_date').eq('school_id',school).eq('created_by',user).in('status',['conducted','marked']).order('assessment_date',{ascending:false}).limit(50))
+  safeQuery(db.from('school_assessments').select('id,class_id,section_id,subject_id,max_marks,assessment_date').eq('school_id',school).eq('created_by',user).in('status',['conducted','marked']).order('assessment_date',{ascending:false}).limit(50)),
+  safeQuery(db.from('noor_teacher_student_support').select('id,student_id,note,support_action,follow_up_on,status,created_at').eq('school_id',school).eq('teacher_id',user).order('created_at',{ascending:false}).limit(20)),
+  classIds.length?safeQuery(db.from('profiles').select('id,full_name,roll_number,class_id,section_id').eq('school_id',school).eq('role','student').eq('status','active').in('class_id',classIds).limit(500)):Promise.resolve({data:[]}),
+  safeQuery(db.from('noor_teacher_substitutions').select('id,period_id,class_date,instructions,original_teacher_id').eq('school_id',school).eq('substitute_teacher_id',user).gte('class_date',day).order('class_date').limit(20))
  ]);
  if(token!==revision||!valid()||A().schoolId!==school||!slot.isConnected)return;
  const ass=schoolAssignments.data||[],idList=ass.map(x=>x.id),tests=assessments.data||[],testIds=tests.map(t=>t.id);
@@ -93,6 +96,11 @@ async function mount(ctx){
     (saved?'<small class="nti-saved">Lesson diary: '+E(saved.topic)+'</small>':'')+'</div><button type="button" data-nti-log="'+E(p.id)+'">'+(saved?'Edit diary':'Lesson diary')+'</button></div>'
   }).join(''):empty('No approved periods scheduled for today.');
  const links=(resources.data||[]).length?(resources.data||[]).slice(0,5).map(r=>'<div class="nti-resource"><a rel="noopener noreferrer" target="_blank" href="'+E(r.resource_url)+'">'+E(r.title)+'</a><small>'+E(r.visibility==='students'?'Shared with students':'Teacher only')+'</small></div>').join(''):empty('No resources saved yet.');
+ const visibleStudents=(studentRows.data||[]).filter(x=>assignments.some(a=>a.class_id===x.class_id&&(!a.section_id||a.section_id===x.section_id)));
+ const studentNames=new Map(visibleStudents.map(x=>[x.id,x.full_name]));
+ const supportOptions=visibleStudents.map(x=>'<option value="'+E(x.id)+'">'+E(x.full_name)+(x.roll_number?' · '+E(x.roll_number):'')+'</option>').join('');
+ const supportList=(supportRows.data||[]).slice(0,6).map(x=>'<div class="nti-insight"><b>'+E(studentNames.get(x.student_id)||'Assigned student')+' · '+E(x.status)+'</b><span>'+E(x.note.slice(0,160))+(x.follow_up_on?' · Follow up '+E(x.follow_up_on):'')+'</span></div>').join('')||empty('No support follow-ups recorded.');
+ const substitutionList=(substituteRows.data||[]).slice(0,5).map(x=>'<div class="nti-insight"><b>Substitute class · '+E(x.class_date)+'</b><span>'+E(x.instructions||'Principal approved substitute period')+'</span></div>').join('')||empty('No substitute handover assigned.');
  const contextOpts=assignments.map((x,i)=>'<option value="'+i+'">'+E(name(cMap,x.class_id))+(x.section_id?' · Assigned section':' · All sections')+'</option>').join('');
  slot.innerHTML='<div class="nti-title"><div><span class="nti-eyebrow">LIVE · SCHOOL RECORDS</span><h2>✦ AI Teacher Command Centre</h2><p>Your teaching priorities, based on saved NOOR data.</p></div><button id="ntiRefresh" type="button" class="nti-refresh">↻ Refresh</button></div>'+
  '<div class="nti-kpis">'+kpi(doneCount+' / '+periodToday.length,'Periods completed','Today · approved timetable','violet')+
@@ -108,9 +116,18 @@ async function mount(ctx){
  '<section class="nti-pane nti-tools"><div class="nti-subhead"><h3>Smart Teaching Tools</h3><span class="nti-pill">Connected to NOOR</span></div><div class="nti-actions">'+
  action('Smart Notes','teaching','✦')+action('Generate paper','paper-generator','▤')+action('Weekly lesson plan','weekly-plan','◷')+
  action('Daily teaching diary','daily-report','✎')+action('Review assignments','paper-generator','✓')+
- action('School calendar','teacher-calendar','▦')+action('Teacher notices','notices','◇')+
+ action('School calendar','school-calendar','▦')+action('Teacher notices','notices','◇')+
  action('School messages','notifications','✉')+'</div>'+
  '<p class="nti-help">More workflows, including confidential rubrics and substitute handovers, require Principal-approved setup.</p></section>'+
+ '<section class="nti-pane nti-tools"><div class="nti-subhead"><h3>Private Student Support Follow-ups</h3><span class="nti-pill">Teacher + authorized Principal only</span></div>'+
+ '<p class="nti-help">Record supportive academic follow-ups for enrolled students. Avoid labels or sensitive medical details.</p>'+
+ '<form id="ntiSupportForm" class="nti-resource-form"><label>My assigned student<select name="student_id" required>'+supportOptions+'</select></label>'+
+ '<label>Academic observation<input name="note" minlength="4" maxlength="2500" required placeholder="Reading practice discussed"></label>'+
+ '<label>Support plan<input name="support_action" maxlength="1500" placeholder="Offer extra practice"></label>'+
+ '<label>Follow-up date<input name="follow_up_on" type="date"></label><button type="submit" '+(visibleStudents.length?'':'disabled')+'>Save follow-up</button></form>'+
+ '<div>'+supportList+'</div></section>'+
+ '<section class="nti-pane nti-tools"><div class="nti-subhead"><h3>Substitute Teacher Handover</h3><span class="nti-pill">Principal assigned</span></div>'+
+ '<p class="nti-help">Authorized substitute periods and their teaching instructions appear here.</p>'+substitutionList+'</section>'+
  '<section class="nti-pane nti-tools"><div class="nti-subhead"><h3>Teaching Resource Library</h3><span class="nti-pill">Links saved to your school</span></div>'+
  '<form id="ntiResourceForm" class="nti-resource-form"><label>Assigned class<select name="context" required>'+contextOpts+'</select></label>'+
  '<label>Resource title<input name="title" placeholder="Revision video or notes" maxlength="160" required></label>'+
@@ -124,6 +141,7 @@ async function mount(ctx){
  slot.querySelectorAll('[data-nti-route]').forEach(b=>b.onclick=()=>A().openView?.(b.dataset.ntiRoute));
  slot.querySelectorAll('[data-nti-log]').forEach(b=>b.onclick=()=>editLesson(b.dataset.ntiLog));
  $('#ntiResourceForm',slot).onsubmit=saveResource;
+ $('#ntiSupportForm',slot).onsubmit=saveStudentSupport;
  connectLive(school,user);
 }
 function editLesson(periodId){
@@ -150,6 +168,17 @@ function editLesson(periodId){
   if(res.error){$('#ntiLessonStatus',d).textContent=res.error.message;button.disabled=false;return;}
   d.close();app.toast?.('Lesson diary saved to school records.','success');await mount(data.ctx);
  };
+}
+async function saveStudentSupport(e){
+ e.preventDefault();const f=e.currentTarget,app=A(),student_id=f.elements.student_id.value,
+ note=f.elements.note.value.trim(),support_action=f.elements.support_action.value.trim(),
+ follow_up_on=f.elements.follow_up_on.value||null,button=f.querySelector('[type="submit"]');
+ if(note.length<4||!student_id)return status('Select your student and write a useful academic observation.',true);
+ button.disabled=true;status('Saving private academic support follow-up…');
+ const r=await app.db.from('noor_teacher_student_support').insert({school_id:app.schoolId,teacher_id:app.user.id,student_id,note,
+ support_action:support_action||null,follow_up_on,status:'open'});
+ button.disabled=false;if(r.error)return status('Support follow-up could not be saved: '+r.error.message,true);
+ app.toast?.('Student follow-up saved privately.','success');await mount(last.ctx);
 }
 async function saveResource(e){
  e.preventDefault();const f=e.currentTarget,app=A(),ctx=last.ctx,i=Number(f.elements.context?.value),target=ctx.assignments?.[i];
