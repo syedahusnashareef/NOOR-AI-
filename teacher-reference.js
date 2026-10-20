@@ -127,7 +127,7 @@ async function render(){
  const weeklyApproved=allPeriods.filter(p=>p.approval_status==='approved');
  const classContexts=[...new Map(weeklyApproved.map(p=>[(p.class_id||p.class_label||'')+':'+(p.section_id||''),p])).values()];
  const classTitle=classContexts.length===1?(classContexts[0].class_label||'Assigned class'):classContexts.length?classContexts.length+' assigned classes':'No assigned class';
- const sectionTitle=classContexts.length===1?(classContexts[0].section_id?'Assigned section':'Not assigned'):classContexts.length?'Multiple sections':'Not assigned';
+ const sectionTitle=classContexts.length===1?(String(classContexts[0].class_label||'').match(/(?:section|sec\.?|[-–])\s*([A-Za-z0-9]+)\b/i)?.[1]||'See timetable'):classContexts.length?'Multiple sections':'Not assigned';
  hero.innerHTML='<div class="nt-reference-greeting"><span>Welcome back,</span> <strong>'+esc(name)+'</strong></div>'+
  '<div class="nt-reference-kpi-grid"><div class="nt-reference-kpi purple"><span>♧</span><div><small>Class</small><b>'+esc(classTitle)+'</b></div></div>'+
  '<div class="nt-reference-kpi pink"><span>♟</span><div><small>Section</small><b>'+esc(sectionTitle)+'</b></div></div>'+
@@ -138,7 +138,7 @@ async function render(){
  const dueTasks=assignedTasks.filter(x=>x.due_at&&new Date(x.due_at).getTime()<Date.now()).length;
  const chartData=[{label:'Periods completed',done:complete,total:approved.length},{label:'Pending tasks',done:assignedTasks.length,total:assignedTasks.length},{label:'Overdue tasks',done:dueTasks,total:assignedTasks.length}];
  referencePanels.innerHTML='<div class="nt-reference-chart-grid">'+
- '<article class="nt-card nt-reference-chart"><div class="nt-card-head"><div><span class="nt-icon">▥</span><h2>Weekly Teaching Progress</h2></div><button type="button" class="nt-btn small" data-link="schedules">Timetable ↗</button></div>'+
+ '<article class="nt-card nt-reference-chart"><div class="nt-card-head"><div><span class="nt-icon">▥</span><h2>Today’s Teaching & Tasks</h2></div><button type="button" class="nt-btn small" data-link="schedules">Timetable ↗</button></div>'+
  '<div class="nt-reference-bars">'+chartData.map((x,i)=>'<div class="nt-reference-bar"><div class="nt-reference-bar-label"><span>'+esc(x.label)+'</span><b>'+x.done+(x.total?' / '+x.total:'')+'</b></div><div class="nt-reference-track"><span class="nt-reference-fill c'+i+'" style="width:'+(x.total?Math.min(100,Math.round(x.done/x.total*100)):0)+'%"></span></div></div>').join('')+'</div>'+
  '<p class="nt-muted">Live workload summary · No invented subject marks</p></article>'+
  '<article class="nt-card nt-reference-chart"><div class="nt-card-head"><div><span class="nt-icon">◉</span><h2>Today’s Progress</h2></div><button type="button" class="nt-btn small" data-link="attendance">Attendance ↗</button></div>'+
