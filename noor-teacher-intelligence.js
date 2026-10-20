@@ -15,7 +15,7 @@ const name=(lookup,id,fallback='Class')=>lookup.get(id)||fallback;
 const status=(msg,bad=false)=>{const el=$('#ntiMessage');if(el){el.textContent=msg;el.style.color=bad?'#9d3a4a':'#386b58'}};
 function planProgress(assigns,units,progress,year){
  if(!assigns.length)return {count:0,lagging:[],expected:null};
- const tracked=units.filter(u=>assigns.some(a=>a.class_id===u.class_id&&(!a.subject_id||a.subject_id===u.subject_id)&&(!a.section_id||!u.section_id||a.section_id===u.section_id)));
+ const tracked=units.filter(u=>(!year?.id||u.academic_year_id===year.id)&&assigns.some(a=>a.class_id===u.class_id&&(!a.subject_id||a.subject_id===u.subject_id)&&(!a.section_id||!u.section_id||a.section_id===u.section_id)));
  const currentP=progress.filter(x=>x.teacher_id===A().user.id);
  const byContext=new Map();
  for(const unit of tracked){const key=unit.class_id+':'+(unit.subject_id||'');let group=byContext.get(key);if(!group){group={class_id:unit.class_id,subject_id:unit.subject_id,units:[]};byContext.set(key,group)}
@@ -58,7 +58,7 @@ async function mount(ctx){
  ]);
  if(token!==revision||A().schoolId!==school||!slot.isConnected)return;
  const cMap=new Map((classRows.data||[]).map(x=>[x.id,x.name])),sMap=new Map((subjectRows.data||[]).map(x=>[x.id,x.name]));
- const periodToday=(ctx?.periods||[]).filter(p=>p.approval_status==='approved'&&p.weekday===new Date(day+'T12:00:00+05:30').getDay());
+ const periodToday=(ctx?.periods||[]).filter(p=>p.approval_status==='approved'&&p.weekday===new Date(day+'T12:00:00+05:30').getUTCDay());
  const doneCount=periodToday.filter(p=>(ctx?.runs||[]).some(r=>r.period_id===p.id&&r.status==='done')).length;
  const ungraded=(submissions.data||[]).filter(s=>!s.graded_at).length;
  const dueSoon=ass.filter(x=>new Date(x.due_at).getTime()<Date.now()+3*864e5 && new Date(x.due_at).getTime()>=Date.now());
@@ -99,7 +99,7 @@ async function mount(ctx){
  const visibleStudents=(studentRows.data||[]).filter(x=>assignments.some(a=>a.class_id===x.class_id&&(!a.section_id||a.section_id===x.section_id)));
  const studentNames=new Map(visibleStudents.map(x=>[x.id,x.full_name]));
  const supportOptions=visibleStudents.map(x=>'<option value="'+E(x.id)+'">'+E(x.full_name)+(x.roll_number?' · '+E(x.roll_number):'')+'</option>').join('');
- const supportList=(supportRows.data||[]).slice(0,6).map(x=>'<div class="nti-insight"><b>'+E(studentNames.get(x.student_id)||'Assigned student')+' · '+E(x.status)+'</b><span>'+E(x.note.slice(0,160))+(x.follow_up_on?' · Follow up '+E(x.follow_up_on):'')+'</span></div>').join('')||empty('No support follow-ups recorded.');
+ const supportList=(supportRows.data||[]).slice(0,6).map(x=>'<div class="nti-insight"><b>'+E(studentNames.get(x.student_id)||'Assigned student')+' · '+E(x.status)+'</b><span>'+E(x.note.slice(0,160))+(x.follow_up_on?' · Follow up '+E(x.follow_up_on):'')+'</span>'+(x.status!=='closed'?'<button type="button" data-nti-close="'+E(x.id)+'" class="nti-refresh">Mark resolved ✓</button>':'')+'</div>').join('')||empty('No support follow-ups recorded.');
  const substitutionList=(substituteRows.data||[]).slice(0,5).map(x=>'<div class="nti-insight"><b>Substitute class · '+E(x.class_date)+'</b><span>'+E(x.instructions||'Principal approved substitute period')+'</span></div>').join('')||empty('No substitute handover assigned.');
  const contextOpts=assignments.map((x,i)=>'<option value="'+i+'">'+E(name(cMap,x.class_id))+(x.section_id?' · Assigned section':' · All sections')+'</option>').join('');
  slot.innerHTML='<div class="nti-title"><div><span class="nti-eyebrow">LIVE · SCHOOL RECORDS</span><h2>✦ AI Teacher Command Centre</h2><p>Your teaching priorities, based on saved NOOR data.</p></div><button id="ntiRefresh" type="button" class="nti-refresh">↻ Refresh</button></div>'+
@@ -142,6 +142,7 @@ async function mount(ctx){
  slot.querySelectorAll('[data-nti-log]').forEach(b=>b.onclick=()=>editLesson(b.dataset.ntiLog));
  $('#ntiResourceForm',slot).onsubmit=saveResource;
  $('#ntiSupportForm',slot).onsubmit=saveStudentSupport;
+ slot.querySelectorAll('[data-nti-close]').forEach(b=>b.onclick=async()=>{b.disabled=true;const app=A(),r=await app.db.from('noor_teacher_student_support').update({status:'closed'}).eq('id',b.dataset.ntiClose).eq('school_id',app.schoolId).eq('teacher_id',app.user.id);if(r.error){status(r.error.message,true);b.disabled=false}else await mount(last.ctx)});
  connectLive(school,user);
 }
 function editLesson(periodId){
@@ -178,6 +179,7 @@ function editLesson(periodId){
   if(res.error){$('#ntiLessonStatus',d).textContent=res.error.message;button.disabled=false;return;}
   const publish=f.elements.publishExit.checked,exitTicket=v('exit_ticket');
   if(publish&&exitTicket){
+   if(!window.NOOR_ASSIGNMENT_PORTAL?.publish){$('#ntiLessonStatus',d).textContent='Lesson saved, but assignment publisher is unavailable. Reload the dashboard.';button.disabled=false;return}
    if(!p.class_id){$('#ntiLessonStatus',d).textContent='Lesson saved, but this period has no official class link. Principal must assign it before publishing.';button.disabled=false;return}
    const due=new Date(new Date(data.day+'T12:00:00+05:30').getTime()+48*3600*1000).toISOString();
    try{await window.NOOR_ASSIGNMENT_PORTAL?.publish?.({title:'Exit Ticket: '+topic,body:exitTicket,
