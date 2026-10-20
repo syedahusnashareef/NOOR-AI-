@@ -29,10 +29,12 @@ async function open(){
  '<label>Section<select id="ntsSection"></select></label>'+
  '<label>Subject (optional)<select id="ntsSubject"></select></label>'+
  '</div><button type="submit" id="ntsSave">Save Teacher Assignment</button></form></section>'+
+ '<section class="nts-card"><h2>Assign Substitute Teacher</h2><p class="nts-muted">Principal-approved coverage for an existing, approved teaching period.</p><form id="ntsSubForm"><div class="nts-grid"><label>Approved period<select id="ntsSubPeriod" required></select></label><label>Substitute teacher<select id="ntsSubTeacher" required></select></label><label>Class date<input id="ntsSubDate" type="date" required></label><label>Handover instructions<input id="ntsSubInstructions" maxlength="2500" placeholder="Classroom topic and resources"></label></div><button type="submit">Assign Substitute</button></form></section>'+ 
  '<section class="nts-card"><h2>Current teaching assignments</h2><div id="ntsList">Loading…</div></section>';
  el.querySelector('#ntsOpenClasses').onclick=()=>app.openView('classes');
  el.querySelector('#ntsAcademicYear').onclick=()=>app.openView('academic-monitoring');
  el.querySelector('#ntsSubjectForm').onsubmit=saveSubject;
+ el.querySelector('#ntsSubForm').onsubmit=assignSubstitute;
  el.querySelector('#ntsClass').onchange=syncChoices;
  el.querySelector('#ntsForm').onsubmit=save;
  await refresh();
@@ -47,19 +49,24 @@ async function refresh(){
  const app=A(),el=root(),id=app.schoolId;
  if(!el)return;
  const db=app.db;
- const [teachers,classes,subjects,assignments]=await Promise.all([
+ const [teachers,classes,subjects,assignments,periods]=await Promise.all([
   db.from('profiles').select('id,full_name').eq('school_id',id).eq('role','teacher').eq('status','active').order('full_name').limit(500),
   db.from('classes').select('id,name').eq('school_id',id).eq('is_active',true).order('sort_order').limit(200),
   db.from('subjects').select('id,class_id,name').eq('school_id',id).limit(500),
-  db.from('teacher_assignments').select('id,teacher_id,class_id,section_id,subject_id,is_active').eq('school_id',id).eq('is_active',true).limit(500)
+  db.from('teacher_assignments').select('id,teacher_id,class_id,section_id,subject_id,is_active').eq('school_id',id).eq('is_active',true).limit(500),
+  db.from('noor_teacher_periods').select('id,teacher_id,weekday,start_time,subject_name,class_label').eq('school_id',id).eq('approval_status','approved').limit(500)
  ]);
  const sections=classes.error||!classes.data?.length?{data:[],error:classes.error||null}:await db.from('sections').select('id,class_id,name').eq('is_active',true).in('class_id',classes.data.map(c=>c.id)).limit(500);
- const err=[teachers,classes,sections,subjects,assignments].find(x=>x.error)?.error;
+ const err=[teachers,classes,sections,subjects,assignments,periods].find(x=>x.error)?.error;
  const feedback=el.querySelector('#ntsStatus');
  if(err){feedback.textContent='Could not load school assignments: '+err.message;return}
- state={teachers:teachers.data||[],classes:classes.data||[],sections:sections.data||[],subjects:subjects.data||[],assignments:assignments.data||[]};
+ state={teachers:teachers.data||[],classes:classes.data||[],sections:sections.data||[],subjects:subjects.data||[],assignments:assignments.data||[],periods:periods.data||[]};
  el.querySelector('#ntsTeacher').innerHTML=state.teachers.map(x=>'<option value="'+E(x.id)+'">'+E(x.full_name)+'</option>').join('')||'<option value="">No active teachers</option>';
  el.querySelector('#ntsClass').innerHTML=state.classes.map(x=>'<option value="'+E(x.id)+'">'+E(x.name)+'</option>').join('')||'<option value="">No school classes</option>';
+ el.querySelector('#ntsSubPeriod').innerHTML=state.periods.map(x=>'<option value="'+E(x.id)+'">'+E(x.class_label)+' · '+E(x.subject_name)+' · '+E(['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][x.weekday])+'</option>').join('')||'<option value="">No approved periods</option>';
+ el.querySelector('#ntsSubTeacher').innerHTML=state.teachers.map(x=>'<option value="'+E(x.id)+'">'+E(x.full_name)+'</option>').join('')||'<option value="">No teachers available</option>';
+ const localDate=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const dg=k=>localDate.find(x=>x.type===k).value;
+ el.querySelector('#ntsSubDate').value=dg('year')+'-'+dg('month')+'-'+dg('day');
  el.querySelector('#ntsSubjectClass').innerHTML=state.classes.map(x=>'<option value="'+E(x.id)+'">'+E(x.name)+'</option>').join('')||'<option value="">Add classes first</option>';
  syncChoices();
  const names=new Map(state.teachers.map(x=>[x.id,x.full_name])),cs=new Map(state.classes.map(x=>[x.id,x.name])),
@@ -76,6 +83,23 @@ async function refresh(){
   b.disabled=true;const r=await db.from('teacher_assignments').update({is_active:false}).eq('id',b.dataset.disable).eq('school_id',id);
   if(r.error){feedback.textContent=r.error.message;b.disabled=false}else await refresh();
  });
+}
+async function assignSubstitute(e){
+ e.preventDefault();const app=A(),el=root(),period=state.periods.find(x=>x.id===el.querySelector('#ntsSubPeriod').value),
+ teacher=el.querySelector('#ntsSubTeacher').value,date=el.querySelector('#ntsSubDate').value,
+ instructions=el.querySelector('#ntsSubInstructions').value.trim(),submit=e.submitter;
+ if(!period||!teacher||!date)return el.querySelector('#ntsStatus').textContent='Select approved period, substitute and date.';
+ if(period.teacher_id===teacher)return el.querySelector('#ntsStatus').textContent='Choose a different teacher as substitute.';
+ const weekday=new Date(date+'T12:00:00+05:30').getDay();
+ if(weekday!==period.weekday)return el.querySelector('#ntsStatus').textContent='Date does not match approved period weekday.';
+ if(submit)submit.disabled=true;
+ const r=await app.db.from('noor_teacher_substitutions').insert({
+  school_id:app.schoolId,period_id:period.id,original_teacher_id:period.teacher_id,substitute_teacher_id:teacher,
+  class_date:date,instructions:instructions||null,created_by:app.user.id
+ });
+ if(submit)submit.disabled=false;
+ if(r.error){el.querySelector('#ntsStatus').textContent='Substitute setup failed: '+r.error.message;return;}
+ app.toast?.('Substitute assigned and handover saved.','success');el.querySelector('#ntsSubInstructions').value='';
 }
 async function saveSubject(event){
  event.preventDefault();
