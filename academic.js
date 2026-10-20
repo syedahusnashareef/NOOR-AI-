@@ -147,8 +147,29 @@ function renderTeaching(){
  '<div class="acad-fields"><div class="field"><label for="unitType">Unit type</label><select id="unitType"><option value="chapter">Chapter</option><option value="lesson">Lesson</option><option value="topic">Topic</option></select></div><div class="field"><label for="unitSequence">Sequence</label><input id="unitSequence" type="number" min="0" value="1"></div><div class="field full"><label for="unitTitle">Unit title *</label><input id="unitTitle" required maxlength="240"></div><div class="field"><label for="unitWeight">Optional syllabus weight</label><input id="unitWeight" type="number" min="0" max="100" step="0.1"></div></div>'+btn('createUnitBtn','Add curriculum unit')+'</form><div id="unitList" style="margin-top:14px"></div></section>'+
  '<section class="acad-panel"><h3>My saved notes</h3><p>Quick private drafts require no extra fields. Publishing to a class requires school details.</p><div id="myPrivateNotesList"></div><div id="myNotesList">'+empty('Loading…')+'</div></section></div>';
  $('view-teaching').innerHTML=shell('Teacher workspace','My Teaching & Smart Notes','Subject-wise notes, syllabus tracking and teacher-reviewed materials using your assigned classes.',body);
- $('notesForm').onsubmit=e=>e.preventDefault();$('syllabusImages').onchange=()=>{state.images=[];state.ocrOutput=null;};$('extractSyllabusBtn').onclick=extractImages;$('generateNotesBtn').onclick=generateNotes;$('saveNotesDraft').onclick=()=>saveNotes(false);$('publishNotes').onclick=()=>saveNotes(true);$('printNotes').onclick=()=>window.print();$('createUnitBtn').onclick=createUnit;
+ $('notesForm').onsubmit=e=>e.preventDefault();$('syllabusImages').onchange=()=>{state.images=[];state.ocrOutput=null;};$('extractSyllabusBtn').onclick=extractImages;$('generateNotesBtn').onclick=generateNotes;$('saveNotesDraft').onclick=()=>saveNotes(false);$('publishNotes').onclick=()=>saveNotes(true);$('printNotes').onclick=printTeachingNotes;$('createUnitBtn').onclick=createUnit;
  loadContext().then(()=>{setDefaults();renderUnits();loadMyNotes();}).catch(e=>status('notesAiStatus',err(e),'error'));
+}
+async function printTeachingNotes(){
+ const notes=$('notesEditor')?.value?.trim();
+ if(!notes){msg('Generate and review notes before printing.','error');return}
+ const schoolId=sid();if(!schoolId){msg('School account required to print branded notes.','error');return}
+ let schoolName=window.NOOR_AI_APP?.school?.name||'',logo=window.NOOR_AI_APP?.school?.logo_url||'';
+ try{
+  const result=await db().from('school_directory').select('name,logo_url').eq('id',schoolId).single();
+  if(!result.error&&result.data){schoolName=result.data.name;logo=result.data.logo_url||logo;}
+ }catch(err){console.warn('Notes school branding request failed',err)}
+ if(!schoolName){msg('Cannot confirm your school name. Reopen the school account.','error');return}
+ let printable=document.getElementById('noorPaperPrint');
+ if(!printable){printable=document.createElement('div');printable.id='noorPaperPrint';document.body.append(printable)}
+ const logoHTML=/^https:\/\//i.test(logo||'')?'<img alt="School logo" src="'+E(logo)+'" style="max-width:90px;max-height:75px;object-fit:contain">':'';
+ const title=val('acadTopic')||state.lastAI?.title||'Smart Notes';
+ printable.innerHTML='<header style="text-align:center;padding:10px 0 14px;border-bottom:2px solid #54243b;margin-bottom:16px">'+logoHTML+
+  '<h1 style="font:700 21pt Georgia,serif;margin:5px">'+E(schoolName)+'</h1><h2 style="font-size:13pt;margin:4px">'+E(title)+'</h2>'+
+  '<div style="font-size:10pt">Smart Notes · '+E(val('acadLanguage')||'English')+' · '+E(new Date().toLocaleDateString('en-IN'))+'</div></header>'+
+  '<pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:11pt/1.65 Arial">'+E(notes)+'</pre>'+
+  '<footer style="margin-top:28px;text-align:center;font:9pt Arial;color:#777">Teacher-reviewed material · Powered by NOOR</footer>';
+ window.print();
 }
 async function extractImages(){
  try{status('ocrStatus','Extracting page text…');const c=context(val('acadTopic'));if(!c.school_id)throw new Error('Sign in to your school first.');
