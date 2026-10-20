@@ -121,12 +121,31 @@ async function render(){
  const readErrors=[extra.error,periods.error,runs.error,checkin.error,assignees.error,personal.error,notices.error,calendar.error,assignment.error,membership.error].filter(Boolean);
  if(readErrors.length){const warning=document.createElement('p');warning.className='nt-followup';warning.textContent='Some school records could not be loaded. Check your account permissions or connection and try again.';wrapper.querySelector('.noor-t4')?.prepend(warning);}
  const dash=wrapper.querySelector('.noor-t4'),profileNode=dash?.querySelector('.nt-profile');
- if(dash&&profileNode){const hub=document.createElement('section');hub.id='ntTeacherIntelligence';hub.setAttribute('aria-label','AI Teacher Command Centre');profileNode.insertAdjacentElement('afterend',hub);const attendance=dash.querySelector('.nt-attendance');if(attendance)hub.insertAdjacentElement('afterend',attendance);}
+ if(dash&&profileNode){const hub=document.createElement('section');hub.id='ntTeacherIntelligence';hub.setAttribute('aria-label','AI Teacher Command Centre');
+ hub.innerHTML='<div class="nti-title"><div><span class="nti-eyebrow">NOOR · LIVE TEACHER WORKSPACE</span><h2>✦ AI Teacher Command Centre</h2><p>Today\'s periods, assigned classes, syllabus tracking and student progress</p></div><button type="button" class="nti-refresh" onclick="window.NOOR_TEACHER_INTELLIGENCE?.mount?.(window.NOOR_TEACHER_REFERENCE?.getCurrent?.())">↻ Refresh</button></div>'+
+ '<div class="nti-quick-grid">'+
+ '<button type="button" data-nti-quick="attendance"><b>✓ Attendance</b><small>Online / offline drafts</small></button>'+
+ '<button type="button" data-nti-quick="gap"><b>◈ Student Learning Gap Detector</b><small>Real marks & insights</small></button>'+
+ '<button type="button" data-nti-quick="period"><b>◷ Smart Period Companion</b><small>Periods & homework</small></button>'+
+ '<button type="button" data-nti-quick="rubric"><b>✦ Rubric Grading Assistant</b><small>Teacher-reviewed rubric</small></button>'+
+ '<button type="button" data-nti-quick="syllabus"><b>▤ Smart Syllabus Tracker</b><small>Topic completion</small></button>'+
+ '<button type="button" data-nti-quick="deadline"><b>▦ Assignment Deadline Planner</b><small>Due dates & workload</small></button>'+
+ '<button type="button" data-nti-quick="diary"><b>✎ Digital Teaching Diary</b><small>Daily topic records</small></button>'+
+ '<button type="button" data-nti-quick="calendar"><b>▧ School Calendar</b><small>Events & festivals</small></button>'+
+ '</div><div class="nti-empty">Loading your verified school records. Feature shortcuts work even if analytics are unavailable.</div>';
+ profileNode.insertAdjacentElement('afterend',hub);
+ hub.querySelectorAll('[data-nti-quick]').forEach(b=>b.onclick=()=>{
+ const k=b.dataset.ntiQuick, dest={attendance:'attendance',gap:'assessments',period:'schedules',rubric:'paper-generator',syllabus:'daily-report',deadline:'paper-generator',diary:'daily-report',calendar:'school-calendar'}[k];
+ if(k==='attendance')document.querySelector('.nt-attendance')?.scrollIntoView({behavior:'smooth',block:'start'});
+ else if(dest)openView(dest);
+ });
+ const attendance=dash.querySelector('.nt-attendance');if(attendance)hub.insertAdjacentElement('afterend',attendance);
+}
  current.assignedTasks=assignedTasks;
  wrapper.onclick=onClick; // Replace handler on each render; avoid duplicate clicks/period submissions.
  $('#ntHiddenPhoto').onchange=uploadPhoto;
  window.NOOR_TEACHER_EMBED?.mount?.(current);
- window.NOOR_TEACHER_INTELLIGENCE?.mount?.(current);
+ try{Promise.resolve(window.NOOR_TEACHER_INTELLIGENCE?.mount?.(current)).catch(error=>{console.error('Teacher insights unavailable',error);const node=$('#ntTeacherIntelligence .nti-empty');if(node)node.textContent='Live insights temporarily unavailable; use the feature shortcuts above.'})}catch(error){console.error('Teacher insights module error',error)}
  setLive();
  }catch(err){console.error('NOOR Teacher Dashboard:',err);if(root())root().innerHTML='<div class="noor-t4"><div class="nt-card"><h2>Teacher workspace unavailable</h2><p>'+esc(err?.message||'Please try again.')+'</p><button class="nt-btn primary" id="ntReload">Retry</button></div></div>';const retry=$('#ntReload');if(retry)retry.onclick=render}
  finally{rendering=false}
@@ -293,7 +312,7 @@ function setLive(){
  .on('postgres_changes',{event:'*',schema:'public',table:'noor_staff_attendance',filter:'teacher_id=eq.'+a.user.id},()=>{if(root()?.querySelector('.noor-t4'))render()})
  .subscribe(status=>{live=status==='SUBSCRIBED';const x=$('#ntLiveStatus');if(x)x.textContent=live?'Live sync connected — Principal can view saved class progress.':'School data securely saved. Live connection may be unavailable.'});
 }
-window.NOOR_TEACHER_REFERENCE={render,renderCalendar,openPaper,openCalendar};
+window.NOOR_TEACHER_REFERENCE={render,renderCalendar,openPaper,openCalendar,getCurrent:()=>current};
 const watcher=new MutationObserver(()=>{
  const w=document.getElementById('workspace');
  if(!w||w.classList.contains('hidden')||!isTeacher()){w?.classList.remove('noor-teacher-activated','noor-teacher-handset');if(channel&&get().db){get().db.removeChannel(channel);channel=null;}return;}
