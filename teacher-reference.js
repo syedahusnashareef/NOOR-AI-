@@ -135,7 +135,7 @@ async function render(){
  const referencePanels=document.createElement('section');referencePanels.className='nt-reference-panels';
  const dayStats=approved.length?Math.round(complete/approved.length*100):null;
  const dueTasks=assignedTasks.filter(x=>x.due_at&&new Date(x.due_at).getTime()<Date.now()).length;
- const chartData=[{label:'Periods',done:complete,total:approved.length},{label:'Pending tasks',done:assignedTasks.length,total:assignedTasks.length+complete},{label:'Overdue',done:dueTasks,total:assignedTasks.length}];
+ const chartData=[{label:'Periods completed',done:complete,total:approved.length},{label:'Pending tasks',done:assignedTasks.length,total:assignedTasks.length},{label:'Overdue tasks',done:dueTasks,total:assignedTasks.length}];
  referencePanels.innerHTML='<div class="nt-reference-chart-grid">'+
  '<article class="nt-card nt-reference-chart"><div class="nt-card-head"><div><span class="nt-icon">▥</span><h2>Weekly Teaching Progress</h2></div><button type="button" class="nt-btn small" data-link="schedules">Timetable ↗</button></div>'+
  '<div class="nt-reference-bars">'+chartData.map((x,i)=>'<div class="nt-reference-bar"><div class="nt-reference-bar-label"><span>'+esc(x.label)+'</span><b>'+x.done+(x.total?' / '+x.total:'')+'</b></div><div class="nt-reference-track"><span class="nt-reference-fill c'+i+'" style="width:'+(x.total?Math.min(100,Math.round(x.done/x.total*100)):0)+'%"></span></div></div>').join('')+'</div>'+
