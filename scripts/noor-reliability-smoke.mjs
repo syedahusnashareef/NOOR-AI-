@@ -1,9 +1,13 @@
 import fs from 'node:fs';
+import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 const read=path=>fs.readFileSync(path,'utf8');
 const attendance=read('teacher-attendance.js'),schema=read('supabase/migrations/20261020_noor_atomic_attendance_submit.sql'),mobile=read('index.html');
 const notes=read('academic.js'),paper=read('teacher-paper-generator.js'),parent=read('noor-parent-support.js');
+// Compile the public application's inline JavaScript as well as its linked modules.
+const inlineScripts=[...mobile.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map(x=>x[1]).filter(Boolean);
+for(const [number,script] of inlineScripts.entries())new vm.Script(script,{filename:'index.html#inline-'+number});
 assert.match(attendance,/\.rpc\('noor_submit_attendance_atomic'/,'attendance must call atomic RPC');
 assert.doesNotMatch(attendance,/\.from\('attendance_sessions'\)\.insert/,'attendance must not create session separately');
 assert.doesNotMatch(attendance,/\.from\('attendance_records'\)\.upsert/,'attendance must not save marks separately');
