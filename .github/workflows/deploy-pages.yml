@@ -36,7 +36,7 @@ jobs:
           # Previously omitted modules caused the live site to keep showing the old Teacher UI.
           cp index.html academic.js academic.css academic-extras.js config.js \
             command-centre.js command-centre.css theme-system.js theme-system.css \
-            principal-studio.js principal-mock-data.js principal-staff-live.js \
+            principal-studio.js principal-live.js \
             teacher-attendance.js teacher-reference.js teacher-reference.css \
             teacher-reference-attendance.js teacher-paper-generator.js \
             principal-teacher-approvals.js _site/

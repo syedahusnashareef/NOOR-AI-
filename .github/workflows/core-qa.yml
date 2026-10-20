@@ -1,0 +1,34 @@
+name: Noor Core Workflow QA
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax checks
+        run: |
+          node --check principal-live.js
+          node --check principal-studio.js
+          node --check teacher-reference.js
+          node --check teacher-attendance.js
+          node --check command-centre.js
+          node --check scripts/principal-studio-smoke.mjs
+      - name: Verify live site uses real dashboard assets
+        run: |
+          grep -q 'principal-live.js' index.html
+          ! grep -q '<script src="./principal-mock-data.js' index.html
+          grep -q 'principal-live.js' .github/workflows/deploy-pages.yml
+      - name: Install browser tests
+        run: |
+          npm init -y
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Test isolated principal dashboard, mobile layout and role boundary
+        run: |
+          python3 -m http.server 8060 >/tmp/noor-http.log 2>&1 &
+          SITE_URL=http://127.0.0.1:8060/ node scripts/principal-studio-smoke.mjs
