@@ -139,12 +139,13 @@ async function render(){
  if(k==='attendance')document.querySelector('.nt-attendance')?.scrollIntoView({behavior:'smooth',block:'start'});
  else if(dest)openView(dest);
  });
- const attendance=dash.querySelector('.nt-attendance');if(attendance)hub.insertAdjacentElement('afterend',attendance);
+ const attendance=dash.querySelector('.nt-attendance');if(attendance){hub.insertAdjacentElement('afterend',attendance);const p=document.createElement('section');p.id='ntTeacherPlanners';p.setAttribute('aria-label','Smart Syllabus Tracker and Assignment Deadline Planner');p.innerHTML='<div class="ntp-card">Loading editable syllabus and assignment deadlines…</div>';attendance.insertAdjacentElement('afterend',p);}
 }
  current.assignedTasks=assignedTasks;
  wrapper.onclick=onClick; // Replace handler on each render; avoid duplicate clicks/period submissions.
  $('#ntHiddenPhoto').onchange=uploadPhoto;
  window.NOOR_TEACHER_EMBED?.mount?.(current);
+ try{Promise.resolve(window.NOOR_TEACHER_PLANNERS?.mount?.()).catch(error=>{console.error('Teacher planners unavailable',error);const p=document.querySelector('#ntTeacherPlanners');if(p)p.textContent='Planning tools could not load. Refresh to retry.'})}catch(e){console.error(e)}
  try{Promise.resolve(window.NOOR_TEACHER_INTELLIGENCE?.mount?.(current)).catch(error=>{console.error('Teacher insights unavailable',error);const node=$('#ntTeacherIntelligence .nti-empty');if(node)node.textContent='Live insights temporarily unavailable; use the feature shortcuts above.'})}catch(error){console.error('Teacher insights module error',error)}
  setLive();
  }catch(err){console.error('NOOR Teacher Dashboard:',err);if(root())root().innerHTML='<div class="noor-t4"><div class="nt-card"><h2>Teacher workspace unavailable</h2><p>'+esc(err?.message||'Please try again.')+'</p><button class="nt-btn primary" id="ntReload">Retry</button></div></div>';const retry=$('#ntReload');if(retry)retry.onclick=render}
