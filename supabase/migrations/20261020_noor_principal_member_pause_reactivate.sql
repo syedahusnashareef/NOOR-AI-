@@ -7,77 +7,66 @@ language plpgsql security definer set search_path=''
 as $fn$
 declare
   v_actor uuid := auth.uid();
-  v_action text := lower(trim(coalesce(p_action,'')));
-  v_member record;
-  v_allowed boolean;
-  v_new_status text;
+  v_school uuid;
+  v_member_id uuid;
+  v_role text;
+  v_old_status text;
+  v_target_status text;
+  v_profile_status text;
+  v_authorised boolean;
 begin
   if v_actor is null then
-    raise exception 'Sign in as an authorised Principal.' using errcode='42501';
+    raise exception 'Principal sign-in required' using errcode='42501';
   end if;
-  if v_action not in ('pause','reactivate') then
-    raise exception 'Action must be pause or reactivate.' using errcode='22023';
+  if p_action not in ('pause','reactivate') then
+    raise exception 'Invalid access action' using errcode='22023';
   end if;
-  select m.id, m.school_id, m.user_id, m.role, m.status as membership_status,
-         p.status as profile_status
-    into v_member
+  select m.id,m.school_id,m.role,m.status
+    into v_member_id,v_school,v_role,v_old_status
     from public.school_memberships m
     join public.profiles p on p.id=m.user_id and p.school_id=m.school_id and p.role=m.role
-    where m.user_id=p_user_id and m.role in ('student','teacher')
-    for update of m,p;
-  if not found then
-    raise exception 'Student or teacher membership not found.' using errcode='P0002';
+   where m.user_id=p_user_id and m.role in ('teacher','student')
+   for update of m;
+  if v_member_id is null then
+    raise exception 'Teacher or student membership not found' using errcode='P0002';
   end if;
   if v_actor=p_user_id then
-    raise exception 'You cannot change your own access.' using errcode='42501';
+    raise exception 'Self-modification is not allowed' using errcode='42501';
   end if;
   select private.is_creator() or exists (
-    select 1
-      from public.profiles ap
-      join public.school_memberships am
-        on am.school_id=ap.school_id and am.user_id=ap.id
-       and am.status='active' and am.role=ap.role
-      join public.schools s on s.id=ap.school_id
-      where ap.id=v_actor and ap.status='active'
-        and ap.role in ('owner','principal')
-        and ap.school_id=v_member.school_id
-        and s.is_active and s.verification_status='verified'
-        and s.account_status='active'
-  ) into v_allowed;
-  if not coalesce(v_allowed,false) then
-    raise exception 'Only this school''s active Principal or platform Creator can change access.' using errcode='42501';
+    select 1 from public.profiles a
+    join public.school_memberships am on am.user_id=a.id and am.school_id=a.school_id
+      and am.role=a.role and am.status='active'
+    join public.schools s on s.id=a.school_id
+    where a.id=v_actor and a.school_id=v_school and a.status='active'
+      and a.role in ('owner','principal')
+      and s.is_active and s.account_status='active' and s.verification_status='verified'
+  ) into v_authorised;
+  if not coalesce(v_authorised,false) then
+    raise exception 'Only this school Principal may control member access' using errcode='42501';
   end if;
-  if v_action='pause' and v_member.membership_status not in ('active','suspended') then
-    raise exception 'Only an active school member can be paused.' using errcode='22023';
+  if v_old_status not in ('active','suspended') then
+    raise exception 'Removed or transferred members cannot use Pause/Reactivate' using errcode='42501';
   end if;
-  if v_action='reactivate' and v_member.membership_status not in ('suspended','active') then
-    raise exception 'This member was removed or transferred and cannot be reactivated here.' using errcode='42501';
-  end if;
-  v_new_status := case when v_action='pause' then 'suspended' else 'active' end;
-  -- Marks both rows in one transaction. No assignments, marks, attendance or files are deleted.
-  update public.school_memberships set
-    status=v_new_status, updated_at=now(),
-    removed_at=case when v_action='pause' then now() else null end,
-    removed_by=case when v_action='pause' then v_actor else null end,
-    removal_reason=case when v_action='pause' then left(nullif(trim(coalesce(p_reason,'')),''),300) else null end
-    where id=v_member.id;
+  v_target_status := case when p_action='pause' then 'suspended' else 'active' end;
+  v_profile_status := case when p_action='pause' then 'inactive' else 'active' end;
+  update public.school_memberships set status=v_target_status,updated_at=now(),
+    removed_at=case when p_action='pause' then now() else null end,
+    removed_by=case when p_action='pause' then v_actor else null end,
+    removal_reason=case when p_action='pause' then left(nullif(trim(coalesce(p_reason,'')),''),300) else null end
+  where id=v_member_id;
   perform set_config('noor.member_admin_change','on',true);
   perform set_config('noor.allow_profile_admin_change','on',true);
-  update public.profiles set status=case when v_action='pause' then 'inactive' else 'active' end,
-    updated_at=now() where id=p_user_id;
-  if v_member.membership_status is distinct from v_new_status
-     or v_member.profile_status is distinct from case when v_action='pause' then 'inactive' else 'active' end then
-    insert into public.administrative_audit_logs
-       (school_id,actor_id,target_user_id,action,reason,metadata)
-    values (v_member.school_id,v_actor,p_user_id,
-      case when v_action='pause' then 'school_member_paused' else 'school_member_reactivated' end,
-      left(nullif(trim(coalesce(p_reason,'')),''),300),
-      jsonb_build_object('membership_id',v_member.id,'role',v_member.role,
-         'previous_membership_status',v_member.membership_status,'new_membership_status',v_new_status));
-  end if;
-  return jsonb_build_object('user_id',p_user_id,'role',v_member.role,
-       'membership_status',v_new_status,
-       'profile_status',case when v_action='pause' then 'inactive' else 'active' end);
+  update public.profiles set status=v_profile_status,updated_at=now() where id=p_user_id;
+  insert into public.administrative_audit_logs
+    (school_id,actor_id,target_user_id,action,reason,metadata)
+  values (v_school,v_actor,p_user_id,
+    case when p_action='pause' then 'school_member_paused' else 'school_member_reactivated' end,
+    left(nullif(trim(coalesce(p_reason,'')),''),300),
+    jsonb_build_object('membership_id',v_member_id,'role',v_role,
+      'previous_status',v_old_status,'new_status',v_target_status));
+  return jsonb_build_object('user_id',p_user_id,'role',v_role,
+     'membership_status',v_target_status,'profile_status',v_profile_status);
 end;
 $fn$;
 revoke all on function public.noor_set_member_access(uuid,text,text) from public,anon;
