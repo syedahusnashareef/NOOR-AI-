@@ -53,14 +53,14 @@ BEGIN
  SELECT count(*) INTO v_roster FROM public.profiles p
   WHERE p.school_id=p_school_id AND p.class_id=p_class_id AND p.status='active'
     AND p.role='student'
-    AND ((p_section_id IS NULL AND p.section_id IS NULL) OR p.section_id=p_section_id);
+    AND (p_section_id IS NULL OR p.section_id=p_section_id);
  IF v_roster<>v_total OR EXISTS (
   SELECT 1 FROM jsonb_array_elements(p_marks) m
   WHERE NOT EXISTS (
    SELECT 1 FROM public.profiles p
    WHERE p.id=(m->>'student_id')::uuid AND p.school_id=p_school_id
      AND p.class_id=p_class_id AND p.status='active' AND p.role='student'
-     AND ((p_section_id IS NULL AND p.section_id IS NULL) OR p.section_id=p_section_id)
+     AND (p_section_id IS NULL OR p.section_id=p_section_id)
   )
  ) THEN RAISE EXCEPTION 'Attendance roster changed. Refresh the class list and retry.' USING ERRCODE='22023';
  END IF;
