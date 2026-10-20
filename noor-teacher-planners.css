@@ -57,3 +57,40 @@
 #workspace .noor-t4 .nt-att-mobile-options .nt-radio.late[aria-checked=true]{background:#fff0d5!important;color:#835a20!important;border:2px solid #e5bb74!important}
 #workspace .noor-t4 .nt-att-mobile-options .nt-radio:focus-visible{outline:3px solid #ad6589;outline-offset:2px}
 @media(max-width:380px){#workspace .noor-t4 .nt-att-mobile-options .nt-radio{font-size:11px!important}}
+
+
+/* Teacher reference palette and responsive data cards */
+.noor-t4 .nt-reference-kpis{margin:14px 0 18px}
+.noor-t4 .nt-reference-greeting{color:#754c65;margin-bottom:10px;font-size:14px}
+.noor-t4 .nt-reference-greeting strong{color:#511b37}
+.noor-t4 .nt-reference-kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.noor-t4 .nt-reference-kpi{min-width:0;display:flex;gap:12px;align-items:center;padding:16px;border-radius:17px;border:1px solid #eadbe4}
+.noor-t4 .nt-reference-kpi.purple{background:linear-gradient(120deg,#f3edff,#e9dfff)}
+.noor-t4 .nt-reference-kpi.pink{background:linear-gradient(120deg,#fff0f6,#fbdce9)}
+.noor-t4 .nt-reference-kpi.green{background:linear-gradient(120deg,#e8fbf1,#d9f4e7)}
+.noor-t4 .nt-reference-kpi>span{font-size:26px;color:#b34b8b}
+.noor-t4 .nt-reference-kpi small{display:block;font-size:12px;color:#765e70}
+.noor-t4 .nt-reference-kpi b{display:block;font-size:20px;color:#53243e;overflow-wrap:anywhere}
+.noor-t4 .nt-reference-panels{margin:16px 0}
+.noor-t4 .nt-reference-chart-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr);gap:14px}
+.noor-t4 .nt-reference-chart{min-width:0;padding:18px;border-radius:17px}
+.noor-t4 .nt-reference-bars{display:grid;gap:18px;margin:20px 0}
+.noor-t4 .nt-reference-bar-label{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:#754b63;margin-bottom:7px}
+.noor-t4 .nt-reference-track{height:15px;border-radius:10px;background:#f7eaf0;overflow:hidden}
+.noor-t4 .nt-reference-fill{display:block;height:100%;border-radius:10px;background:linear-gradient(90deg,#ff87ae,#e9408a)}
+.noor-t4 .nt-reference-fill.c1{background:linear-gradient(90deg,#c9a6fc,#8e69df)}
+.noor-t4 .nt-reference-fill.c2{background:linear-gradient(90deg,#78ded1,#31b9b3)}
+.noor-t4 .nt-reference-ring{--progress:0;width:152px;height:152px;border-radius:50%;margin:18px auto;display:grid;place-items:center;background:conic-gradient(#37bb8e calc(var(--progress)*1%),#f5dbe6 0)}
+.noor-t4 .nt-reference-ring>div{width:116px;height:116px;border-radius:50%;background:#fff;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.noor-t4 .nt-reference-ring strong{font-size:27px;color:#59233d}
+.noor-t4 .nt-reference-ring small{font-size:11px;color:#806779}
+.noor-t4 .nt-reference-ring-caption{text-align:center;font-size:13px;color:#806779}
+.noor-t4 .nt-reference-quick{margin-top:14px;padding:16px}
+.noor-t4 .nt-reference-action-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}
+.noor-t4 .nt-reference-action{min-height:86px;border:1px solid #f0dbe6;border-radius:13px;background:#fbeaf2;color:#602d49;display:grid;align-content:center;justify-items:center;gap:8px;padding:10px 5px;cursor:pointer;font-size:12px}
+.noor-t4 .nt-reference-action:nth-child(3n+1){background:#e8f7f4}
+.noor-t4 .nt-reference-action:nth-child(3n+2){background:#f1e9ff}
+.noor-t4 .nt-reference-action span{font-size:24px}
+.noor-t4 .nt-reference-action:focus-visible{outline:3px solid #aa5a89}
+@media(max-width:800px){.noor-t4 .nt-reference-chart-grid{grid-template-columns:minmax(0,1fr)}.noor-t4 .nt-reference-action-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.noor-t4 .nt-reference-kpi-grid{gap:7px}.noor-t4 .nt-reference-kpi{padding:9px 6px;min-height:76px;flex-direction:column;gap:4px;text-align:center}.noor-t4 .nt-reference-kpi>span{font-size:19px}.noor-t4 .nt-reference-kpi b{font-size:14px}.noor-t4 .nt-reference-kpi small{font-size:10px}.noor-t4 .nt-reference-chart{padding:13px}.noor-t4 .nt-reference-quick{padding:13px}.noor-t4 .nt-reference-action-grid{gap:7px}.noor-t4 .nt-reference-action{min-height:80px;font-size:11px}}
