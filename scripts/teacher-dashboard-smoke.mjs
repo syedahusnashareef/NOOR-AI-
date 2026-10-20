@@ -65,9 +65,17 @@ async function check(viewport){
   const profile=page.locator(".noor-t4 .nt-profile");
   await profile.waitFor({state:"visible",timeout:15000});
   if(!(await profile.innerText()).includes("QA Teacher"))throw Error("Teacher profile not visible");
-  if(!(await page.locator(".noor-t4").innerText()).includes("My Timetable"))throw Error("Timetable panel not visible");
-  await page.locator("#ntAttTable tr").first().waitFor({timeout:15000});
+  if(!(await page.locator(".noor-t4").innerText()).includes("Teaching Periods"))throw Error("Teaching Periods not visible");
+  if(viewport.width<=760)await page.locator("#ntAttTable .nt-att-mobile-row").first().waitFor({timeout:15000});
+  else await page.locator("#ntAttTable tr").first().waitFor({timeout:15000});
   if(!(await page.locator("#ntAttTable").innerText()).includes("Student Example A"))throw Error("Student roster not visible");
+  await page.locator("#ntTeacherIntelligence .nti-quick-grid").first().waitFor({timeout:15000});
+  if(!(await page.locator("#ntTeacherIntelligence").innerText()).includes("AI Teacher Command Centre"))throw Error("AI Teacher Command Centre missing beneath profile");
+  await page.locator("#ntTeacherPlanners #ntpSyllabus").waitFor({timeout:15000});
+  await page.locator("#ntTeacherPlanners #ntpDeadlines").waitFor({timeout:15000});
+  const geometry=await page.evaluate(()=>{const photo=document.querySelector('.noor-t4 .nt-photo'),profile=document.querySelector('.noor-t4 .nt-profile'),hub=document.getElementById('ntTeacherIntelligence'),attendance=document.querySelector('.nt-attendance');const s=photo?getComputedStyle(photo):null;return {width:photo?.getBoundingClientRect().width||0,borderRadius:parseFloat(s?.borderTopLeftRadius||'999'),order:profile&&hub&&profile.nextElementSibling===hub,attendance:!!attendance};});
+  if(geometry.width<155||geometry.borderRadius>23)throw Error("Teacher profile is not a large rectangular portrait: "+JSON.stringify(geometry));
+  if(!geometry.order||!geometry.attendance)throw Error("Profile / Command Centre / Attendance layout incomplete");
   const bounds=await page.locator(".noor-t4").boundingBox();
   if(bounds?.width>viewport.width+25)throw Error("Teacher layout overflows screen: "+bounds?.width+" > "+viewport.width);
   await page.locator("#ntEditProfile").click();
@@ -80,7 +88,7 @@ async function check(viewport){
   await page.locator("#ppForm").waitFor({timeout:15000});
   if(!(await page.locator("#ppForm").innerText()).includes("Paper type"))throw Error("Paper generator not functional");
   if(errors.length)throw Error("Browser exceptions: "+errors.join(" | "));
-  console.log("PASS: Teacher dashboard, editable profile, timetable, roll-number attendance and paper editor (mock data), viewport "+viewport.width);
+  console.log("PASS: Teacher profile, rectangle photo, AI Command Centre, syllabus/deadline planners, responsive attendance, paper editor (mock data), viewport "+viewport.width);
  }finally{await page.close()}
 }
 try{await check({width:1280,height:840});await check({width:390,height:844});}finally{await browser.close()}
