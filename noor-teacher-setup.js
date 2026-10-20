@@ -20,8 +20,9 @@ async function open(){
  const app=A(),el=root();
  if(!el||!app.db||!app.schoolId||!['owner','principal','manager'].includes(app.profile?.role))return;
  el.innerHTML='<h1>Teacher Class Assignments</h1><p class="nts-muted">Assign official school classes and sections. Teachers use these records for timetable, attendance, Smart Notes and papers.</p>'+
- '<section class="nts-card"><button type="button" id="ntsOpenClasses" class="secondary">Manage School Classes & Sections →</button>'+
+ '<section class="nts-card"><button type="button" id="ntsOpenClasses" class="secondary">Manage School Classes & Sections →</button> <button type="button" id="ntsAcademicYear" class="secondary">Academic Years →</button>'+
  '<div id="ntsStatus" role="status" class="nts-muted" style="margin-top:10px">Loading real school data…</div></section>'+
+ '<section class="nts-card"><h2>Create official subject</h2><form id="ntsSubjectForm"><div class="nts-grid"><label>Class<select id="ntsSubjectClass" required></select></label><label>Subject name<input id="ntsNewSubject" maxlength="100" placeholder="e.g. Science" required></label></div><button type="submit">Save Subject</button></form></section>'+ 
  '<section class="nts-card"><h2>Assign a teacher</h2><form id="ntsForm"><div class="nts-grid">'+
  '<label>Active teacher<select id="ntsTeacher" required></select></label>'+
  '<label>School class<select id="ntsClass" required></select></label>'+
@@ -30,6 +31,8 @@ async function open(){
  '</div><button type="submit" id="ntsSave">Save Teacher Assignment</button></form></section>'+
  '<section class="nts-card"><h2>Current teaching assignments</h2><div id="ntsList">Loading…</div></section>';
  el.querySelector('#ntsOpenClasses').onclick=()=>app.openView('classes');
+ el.querySelector('#ntsAcademicYear').onclick=()=>app.openView('academic-monitoring');
+ el.querySelector('#ntsSubjectForm').onsubmit=saveSubject;
  el.querySelector('#ntsClass').onchange=syncChoices;
  el.querySelector('#ntsForm').onsubmit=save;
  await refresh();
@@ -57,6 +60,7 @@ async function refresh(){
  state={teachers:teachers.data||[],classes:classes.data||[],sections:sections.data||[],subjects:subjects.data||[],assignments:assignments.data||[]};
  el.querySelector('#ntsTeacher').innerHTML=state.teachers.map(x=>'<option value="'+E(x.id)+'">'+E(x.full_name)+'</option>').join('')||'<option value="">No active teachers</option>';
  el.querySelector('#ntsClass').innerHTML=state.classes.map(x=>'<option value="'+E(x.id)+'">'+E(x.name)+'</option>').join('')||'<option value="">No school classes</option>';
+ el.querySelector('#ntsSubjectClass').innerHTML=state.classes.map(x=>'<option value="'+E(x.id)+'">'+E(x.name)+'</option>').join('')||'<option value="">Add classes first</option>';
  syncChoices();
  const names=new Map(state.teachers.map(x=>[x.id,x.full_name])),cs=new Map(state.classes.map(x=>[x.id,x.name])),
  ss=new Map(state.sections.map(x=>[x.id,x.name])),su=new Map(state.subjects.map(x=>[x.id,x.name]));
@@ -72,6 +76,18 @@ async function refresh(){
   b.disabled=true;const r=await db.from('teacher_assignments').update({is_active:false}).eq('id',b.dataset.disable).eq('school_id',id);
   if(r.error){feedback.textContent=r.error.message;b.disabled=false}else await refresh();
  });
+}
+async function saveSubject(event){
+ event.preventDefault();
+ const app=A(),el=root(),name=el.querySelector('#ntsNewSubject').value.trim(),class_id=el.querySelector('#ntsSubjectClass').value;
+ if(!name||!class_id){el.querySelector('#ntsStatus').textContent='Select a class and enter a subject.';return}
+ const b=event.submitter;if(b)b.disabled=true;
+ try{
+  const r=await app.db.from('subjects').insert({school_id:app.schoolId,class_id,name,created_by:app.user.id,is_active:true});
+  if(r.error)throw r.error;
+  el.querySelector('#ntsNewSubject').value='';app.toast?.('School subject saved.','success');await refresh();
+ }catch(err){el.querySelector('#ntsStatus').textContent='Subject could not be created: '+err.message}
+ finally{if(b)b.disabled=false}
 }
 async function save(event){
  event.preventDefault();
