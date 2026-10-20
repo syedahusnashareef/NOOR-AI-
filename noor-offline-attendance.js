@@ -39,6 +39,7 @@ async function sync(){
  }
  return results;
 }
+async function discard({class_id,section_id,attendance_date}){const a=identity();await access('readwrite',st=>st.delete(key(a,{class_id,section_id,attendance_date})));}
 const isNetworkFailure=error=>navigator.onLine===false||/fetch|network|failed to fetch|load failed|connection|timeout/i.test(String(error?.message||''));
-window.NOOR_OFFLINE_ATTENDANCE={queue,all,sync,isNetworkFailure};
+window.NOOR_OFFLINE_ATTENDANCE={queue,all,sync,discard,isNetworkFailure};
 })();
