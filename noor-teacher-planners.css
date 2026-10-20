@@ -38,3 +38,22 @@
  #view-attendance .ta-offline-panel button{width:100%;min-height:44px}
 }
 @media(max-width:380px){#ntTeacherPlanners .ntp-inline{grid-template-columns:minmax(0,1fr)}}
+
+/* Phone attendance cards: no wide spreadsheet on handhelds */
+.nt-att-mobile-list{display:grid;gap:10px;min-width:0}
+.nt-att-mobile-row{background:#fffdfa;border:1px solid #ecd9e2;border-radius:14px;padding:13px;box-shadow:0 5px 15px #4e23360c;display:grid;gap:10px}
+.nt-att-mobile-name{display:grid;gap:3px;min-width:0}
+.nt-att-mobile-name b{font-size:15px;color:#4b293a;line-height:1.4;overflow-wrap:anywhere}
+.nt-att-mobile-name small{font-size:12px;color:#866c7a}
+.nt-att-mobile-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+#workspace .noor-t4 .nt-att-mobile-options .nt-radio{
+ display:flex;width:100%!important;min-width:0!important;height:46px!important;
+ padding:10px 6px!important;border-radius:10px!important;justify-content:center;align-items:center;
+ font-size:12px!important;font-weight:800!important;line-height:1.2;white-space:nowrap;
+ background:#f8f1f5;border:1px solid #e8d6df;box-shadow:none
+}
+#workspace .noor-t4 .nt-att-mobile-options .nt-radio.present[aria-checked=true]{background:#dff7e9!important;color:#226c46!important;border:2px solid #7dc39b!important}
+#workspace .noor-t4 .nt-att-mobile-options .nt-radio.absent[aria-checked=true]{background:#ffe4e8!important;color:#a33447!important;border:2px solid #e7a3b2!important}
+#workspace .noor-t4 .nt-att-mobile-options .nt-radio.late[aria-checked=true]{background:#fff0d5!important;color:#835a20!important;border:2px solid #e5bb74!important}
+#workspace .noor-t4 .nt-att-mobile-options .nt-radio:focus-visible{outline:3px solid #ad6589;outline-offset:2px}
+@media(max-width:380px){#workspace .noor-t4 .nt-att-mobile-options .nt-radio{font-size:11px!important}}
