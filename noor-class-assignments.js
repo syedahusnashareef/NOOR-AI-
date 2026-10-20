@@ -58,7 +58,7 @@ async function open(){
   }catch(err){inform('Submission failed: '+err.message,true)}finally{button.disabled=false}
  });
 }
-async function publish({title,body,context,due_at,max_marks,paper_draft_id}){
+async function publish({title,body,context,due_at,max_marks,paper_draft_id,answer_key_text}){
  const app=A();if(app.profile?.role!=='teacher'||!app.schoolId)throw Error('Teacher account required.');
  if(!context?.class_id||!title?.trim()||!body?.trim()||!due_at)throw Error('Class, title, questions and due date are required.');
  if(!Number.isInteger(Number(max_marks))||Number(max_marks)<1||Number(max_marks)>1000)throw Error('Marks must be between 1 and 1000.');
@@ -67,7 +67,7 @@ async function publish({title,body,context,due_at,max_marks,paper_draft_id}){
   section_id:context.section_id||null,subject_id:context.subject_id||null,source_paper_id:paper_draft_id||null,
   title:title.trim().slice(0,180),paper_text:body.trim(),instructions:'',assignment_type:'homework',max_marks:Number(max_marks),due_at:new Date(due_at).toISOString(),is_active:true
  }).select('id').single();
- if(r.error)throw r.error;app.toast?.('Assignment published to the selected school class.','success');return r.data;
+ if(r.error)throw r.error;if(String(answer_key_text||'').trim()){const saved=await app.db.from('noor_assignment_answer_keys').insert({assignment_id:r.data.id,teacher_id:app.user.id,answer_key_text:String(answer_key_text).trim()});if(saved.error){app.toast?.('Assignment published, but private answer key was not saved: '+saved.error.message,'error');return r.data;}}app.toast?.('Assignment published to the selected school class.','success');return r.data;
 }
 async function teacherInbox(){
  const app=A(),area=document.getElementById('ppPublished');
