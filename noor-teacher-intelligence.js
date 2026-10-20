@@ -7,6 +7,29 @@ const valid=()=>A().profile?.role==='teacher'&&A().profile?.status==='active'&&A
 const when=d=>d?new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short'}):'—';
 const today=()=>{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const g=k=>p.find(x=>x.type===k)?.value;return g('year')+'-'+g('month')+'-'+g('day')};
 let revision=0,activeSchool='',channel=null,last={};
+const FEATURE_TILES=[
+ ['✓ Online / Offline Attendance','attendance','Mark & sync roster'],
+ ['◈ Student Learning Gap Detector','gaps','Actual marked results'],
+ ['◷ Smart Period Companion','periods','Lessons & homework'],
+ ['✦ Rubric Grading Assistant','rubric','Editable marking criteria'],
+ ['▤ Smart Syllabus Tracker','syllabus','Chapter progress'],
+ ['▦ Assignment Deadline Planner','deadlines','Review and reschedule'],
+ ['✎ Digital Teaching Diary','diary','Saved teaching records'],
+ ['▧ School Calendar','calendar','School & festival events']
+];
+const tileMarkup=()=>'<div class="nti-quick-grid">'+FEATURE_TILES.map(([name,key,sub])=>
+ '<button type="button" data-nti-quick="'+key+'"><b>'+name+'</b><small>'+sub+'</small></button>').join('')+'</div>';
+function handleTileClicks(slot){
+ slot.querySelectorAll('[data-nti-quick]').forEach(btn=>btn.onclick=()=>{
+ const key=btn.dataset.ntiQuick;
+ if(key==='attendance'){document.querySelector('.nt-attendance')?.scrollIntoView({behavior:'smooth',block:'start'});return}
+ if(key==='rubric'){A().openView?.('paper-generator');return}
+ if(key==='diary'){const first=document.querySelector('#ntiPeriods [data-nti-log]');if(first){first.click();return}A().openView?.('daily-report');return}
+ if(key==='calendar'){A().openView?.('school-calendar');return}
+ document.querySelector('#nti'+{gaps:'Gaps',periods:'Periods',syllabus:'Syllabus',deadlines:'Deadlines'}[key])?.scrollIntoView({behavior:'smooth',block:'start'});
+ });
+}
+
 const safeQuery=async(promise)=>{try{const result=await promise;return result.error?{data:[],error:result.error}:{data:result.data||[],error:null}}catch(err){return{data:[],error:err}}};
 const empty=(msg)=>'<p class="nti-empty">'+E(msg)+'</p>';
 const action=(label,view,icon='↗')=>'<button type="button" class="nti-action" data-nti-route="'+E(view)+'"><span>'+icon+'</span>'+E(label)+'</button>';
@@ -31,8 +54,8 @@ function planProgress(assigns,units,progress,year){
 async function mount(ctx){
  const slot=$('#ntTeacherIntelligence');if(!slot||!valid())return;
  const token=++revision,app=A(),db=app.db,school=app.schoolId,user=app.user.id,assignments=ctx?.assignments||[];
- slot.innerHTML='<div class="nti-title"><div><span class="nti-eyebrow">YOUR TEACHING WORKSPACE</span><h2>✦ AI Teacher Command Centre</h2><p>Live records, clear priorities — no made-up numbers.</p></div><button type="button" class="nti-refresh" id="ntiRefresh">↻ Refresh</button></div><div class="nti-loading">Checking your assigned classes, periods and assignments…</div>';
- $('#ntiRefresh',slot).onclick=()=>mount(ctx);
+ slot.innerHTML='<div class="nti-title"><div><span class="nti-eyebrow">YOUR TEACHING WORKSPACE</span><h2>✦ AI Teacher Command Centre</h2><p>Live records, clear priorities — no made-up numbers.</p></div><button type="button" class="nti-refresh" id="ntiRefresh">↻ Refresh</button></div>'+tileMarkup()+'<div class="nti-loading">Checking your assigned classes, periods and assignments…</div>';
+ $('#ntiRefresh',slot).onclick=()=>mount(ctx);handleTileClicks(slot);
  if(!assignments.length){slot.innerHTML+='<div class="nti-banner">Your Principal has not assigned any class yet. Class-specific analytics will appear after assignment.</div>'}
  const classIds=[...new Set(assignments.map(a=>a.class_id))],day=today();
  const schoolFilter=()=>db.from('noor_class_assignments').select('id,title,class_id,section_id,due_at,max_marks,status').eq('school_id',school).eq('teacher_id',user).eq('status','published').order('due_at',{ascending:true}).limit(120);
@@ -103,16 +126,16 @@ async function mount(ctx){
  const substitutionList=(substituteRows.data||[]).slice(0,5).map(x=>'<div class="nti-insight"><b>Substitute class · '+E(x.class_date)+'</b><span>'+E(x.instructions||'Principal approved substitute period')+'</span></div>').join('')||empty('No substitute handover assigned.');
  const contextOpts=assignments.map((x,i)=>'<option value="'+i+'">'+E(name(cMap,x.class_id))+(x.section_id?' · Assigned section':' · All sections')+'</option>').join('');
  slot.innerHTML='<div class="nti-title"><div><span class="nti-eyebrow">LIVE · SCHOOL RECORDS</span><h2>✦ AI Teacher Command Centre</h2><p>Your teaching priorities, based on saved NOOR data.</p></div><button id="ntiRefresh" type="button" class="nti-refresh">↻ Refresh</button></div>'+
- '<div class="nti-kpis">'+kpi(doneCount+' / '+periodToday.length,'Periods completed','Today · approved timetable','violet')+
+ tileMarkup()+'<div class="nti-kpis">'+kpi(doneCount+' / '+periodToday.length,'Periods completed','Today · approved timetable','violet')+
  kpi(ungraded,'Answers to review','Teacher-published assignments','peach')+
  kpi(tasks,'Pending school tasks','Assigned by Principal','teal')+
  kpi(progress.count?progress.count:'—','Syllabus units','Assigned class curriculum','rose')+'</div>'+
  '<div class="nti-grid"><section class="nti-pane nti-brief"><h3>✦ Your teaching brief</h3><ul>'+intro+'</ul><p class="nti-help">Deterministic insights, not an AI-generated claim. This view never invents school results.</p></section>'+
- '<section class="nti-pane"><div class="nti-subhead"><h3>Learning Gap Insights</h3><button type="button" data-nti-route="assessments">Assessments ↗</button></div>'+gapMarkup+
+ '<section class="nti-pane" id="ntiGaps"><div class="nti-subhead"><h3>Student Learning Gap Detector</h3><button type="button" data-nti-route="assessments">Assessments ↗</button></div>'+gapMarkup+
  '<p class="nti-help">Based on aggregated marked scores. This does not label individual students or diagnose learning ability.</p></section>'+
- '<section class="nti-pane"><div class="nti-subhead"><h3>Syllabus pacing</h3><button type="button" data-nti-route="daily-report">Teaching report ↗</button></div>'+
+ '<section class="nti-pane" id="ntiSyllabus"><div class="nti-subhead"><h3>Smart Syllabus Tracker</h3><button type="button" data-nti-route="daily-report">Teaching report ↗</button></div>'+
  (progress.expected===null?'<p class="nti-help">Set the current academic-year dates to enable pacing comparisons.</p>':'<p class="nti-help">Indicative time elapsed this academic year: '+progress.expected+'%. This is not a mandatory chapter deadline.</p>')+pacing+'</section>'+
- '<section class="nti-pane"><h3>Smart Period Companion</h3><p class="nti-help">Record the topic, homework and exit ticket after teaching. Visible to authorized Principal staff.</p>'+lessonMarkup+'</section></div>'+
+ '<section class="nti-pane" id="ntiPeriods"><h3>Smart Period Companion</h3><p class="nti-help">Record the topic, homework and exit ticket after teaching. Visible to authorized Principal staff.</p>'+lessonMarkup+'</section></div>'+
  '<section class="nti-pane nti-tools"><div class="nti-subhead"><h3>Smart Teaching Tools</h3><span class="nti-pill">Connected to NOOR</span></div><div class="nti-actions">'+
  action('Smart Notes','teaching','✦')+action('Generate paper','paper-generator','▤')+action('Weekly lesson plan','weekly-plan','◷')+
  action('Daily teaching diary','daily-report','✎')+action('Review assignments','paper-generator','✓')+
@@ -137,7 +160,7 @@ async function mount(ctx){
  (dueSoon.length?'<div class="nti-banner">'+E(dueSoon.length+' assignment deadlines are coming in the next 3 days.')+'</div>':'')+
  (errors.length?'<p class="nti-error">Some records could not be read: '+E(errors.join('; '))+'</p>':'')+
  '<p id="ntiMessage" role="status" class="nti-feedback"></p>';
- $('#ntiRefresh',slot).onclick=()=>mount(ctx);
+ $('#ntiRefresh',slot).onclick=()=>mount(ctx);handleTileClicks(slot);
  slot.querySelectorAll('[data-nti-route]').forEach(b=>b.onclick=()=>A().openView?.(b.dataset.ntiRoute));
  slot.querySelectorAll('[data-nti-log]').forEach(b=>b.onclick=()=>editLesson(b.dataset.ntiLog));
  $('#ntiResourceForm',slot).onsubmit=saveResource;
