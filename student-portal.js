@@ -33,7 +33,8 @@ async function readAll(){
   submissions:db().from('noor_student_submissions').select('id,assignment_id,answer_text,file_path,status,marks_obtained,teacher_feedback,reviewed_at,submitted_at').eq('school_id',school).eq('student_id',id).order('submitted_at',{ascending:false}).limit(250),
   plans:db().from('noor_student_study_plans').select('id,title,planned_for,is_done').eq('school_id',school).eq('student_id',id).order('planned_for').limit(250),
   questions:db().from('noor_student_questions').select('id,question,reply,replied_at,created_at').eq('school_id',school).eq('student_id',id).order('created_at',{ascending:false}).limit(80),
-  portfolio:db().from('noor_student_portfolio').select('id,title,description,evidence_url,created_at').eq('school_id',school).eq('student_id',id).order('created_at',{ascending:false}).limit(100)
+  portfolio:db().from('noor_student_portfolio').select('id,title,description,evidence_url,created_at').eq('school_id',school).eq('student_id',id).order('created_at',{ascending:false}).limit(100),
+  notifications:db().from('notification_events').select('id,event_type,subject,status,created_at').eq('school_id',school).eq('recipient_profile_id',id).order('created_at',{ascending:false}).limit(100)
  };
  const entries=Object.entries(jobs);const ans=await Promise.all(entries.map(async([k,v])=>{try{return [k,await v]}catch(e){return[k,{error:e,data:[]}]}}));
  errors=[];data={};ans.forEach(([k,r])=>{data[k]=r.data||[];if(r.error)errors.push(k+': '+(r.error.message||String(r.error)))});
@@ -96,6 +97,27 @@ function lineMarkup(m){
  const w=640,h=205;const pts=m.map((x,i)=>[30+(m.length===1?300:i*570/(m.length-1)),190-Math.max(0,Math.min(100,x.pct))*1.6]).filter(x=>x.every(Number.isFinite));
  return '<svg class="sp-linechart" viewBox="0 0 640 205" role="img" aria-label="Test score trend in percent"><path d="M30 30H610 M30 110H610 M30 190H610" stroke="#eee5f0" fill="none"/><polyline points="'+pts.map(x=>x.join(',')).join(' ')+'" fill="none" stroke="#9c77b1" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+pts.map((x,i)=>'<circle cx="'+x[0]+'" cy="'+x[1]+'" r="5" fill="#6e4d80"><title>'+E(m[i].assessment.title)+' · '+Math.round(m[i].pct)+'% · '+E(date(m[i].assessment.assessment_date))+'</title></circle>').join('')+'<text x="5" y="34" fill="#856f87" font-size="11">100%</text><text x="12" y="194" fill="#856f87" font-size="11">0%</text></svg>';
 }
+
+function weekTrend(){
+ const r=data.recordDays||[];if(!r.length)return empty('Teacher attendance sessions have not been recorded.');
+ const now=new Date();const bins=[];
+ for(let i=5;i>=0;i--){const end=new Date(now.getFullYear(),now.getMonth(),now.getDate()-i*7),start=new Date(end);start.setDate(start.getDate()-6);
+ const grouped=r.filter(x=>x.day>=isoDay(start)&&x.day<=isoDay(end)),pct=grouped.length?Math.round(100*grouped.filter(x=>x.status==='present'||x.status==='late').length/grouped.length):null;
+ bins.push({label:date(isoDay(start)),pct,days:grouped.length});}
+ return bins.some(x=>x.pct!=null)?bins.map((x,i)=>'<div class="sp-bar-row"><b>'+E(x.label)+'</b><div class="sp-bar-track"><div class="sp-bar-fill '+['pink','blue','mint','lilac','peach'][i%5]+'" style="width:'+(x.pct??0)+'%"></div></div><strong>'+(x.pct==null?'—':x.pct+'%')+'</strong></div>').join(''):empty('No attendance data in the last six weeks.');
+}
+function topicBars(m){
+ if(!m.length)return empty('No marked assessments available.');
+ return m.slice(-12).reverse().map((x,i)=>'<div class="sp-bar-row"><b title="'+E(x.assessment.title)+'">'+E(x.assessment.title.slice(0,29))+'</b><div class="sp-bar-track"><div class="sp-bar-fill '+['pink','blue','mint','lilac','peach'][i%5]+'" style="width:'+Math.max(0,Math.min(100,x.pct||0))+'%"></div></div><strong>'+Math.round(x.pct||0)+'%</strong></div>').join('');
+}
+function studentNotices(){
+ const list=notices();renderShell('notices','Teacher & School Notices','Published notices for your authorised school, class and section.',
+ box('Latest Notices','Filtered by school access and publication dates',list.length?'<div class="sp-list">'+list.map(x=>'<article class="sp-item"><h3>'+E(x.title)+'</h3><p class="sp-muted">'+E(dayTime(x.starts_at||x.created_at))+'</p><p style="white-space:pre-wrap;margin-top:9px">'+E(x.body)+'</p></article>').join('')+'</div>':empty('No active classroom or school notices at the moment.')));
+}
+function studentNotifications(){
+ const list=data.notifications||[];renderShell('notifications','My Notifications','Account-specific events saved by your school.',
+ box('Messages & Updates','Queued messages are not proof that an external email was delivered',list.length?'<div class="sp-list">'+list.map(x=>item(x.subject||x.event_type||'School update',dayTime(x.created_at)+' · '+(x.status||'queued'))).join('')+'</div>':empty('No account notifications have been recorded yet.')));
+}
 function marksTable(m){return m.length?'<div class="sp-table-scroll"><table><thead><tr><th>Date</th><th>Test</th><th>Subject</th><th>Marks</th><th>Feedback</th></tr></thead><tbody>'+m.slice().reverse().map(x=>'<tr><td>'+E(date(x.assessment.assessment_date))+'</td><td>'+E(x.assessment.title)+'</td><td>'+E(subject(x.assessment.subject_id))+'</td><td><strong>'+E(money(x.marks_obtained))+' / '+E(money(x.assessment.max_marks))+'</strong></td><td>'+E(x.teacher_feedback||'Awaiting feedback')+'</td></tr>').join('')+'</tbody></table></div>':empty('No teacher-marked results available.');
 }
 function progress(){
@@ -106,7 +128,7 @@ function progress(){
  renderShell('student-progress','My Academic Progress','Real marks, dates and teacher feedback. No sample statistics.',box('Filters','Choose date range and subject',filters)+
  '<div class="sp-kpis"><div class="sp-kpi"><div class="sp-label">Recorded tests</div><div class="sp-value">'+list.length+'</div></div><div class="sp-kpi"><div class="sp-label">Average marks</div><div class="sp-value">'+(score==null?'—':score+'%')+'</div></div><div class="sp-kpi"><div class="sp-label">Attendance trend</div><div class="sp-value">'+(at==null?'—':at+'%')+'</div></div><div class="sp-kpi"><div class="sp-label">All-time tests</div><div class="sp-value">'+all.length+'</div></div></div>'+
  '<div class="sp-grid">'+box('Subject-wise Marks','Average of recorded scored tests',barsMarkup(list))+box('Test Improvement','Chronological score trend; hover points for original test',lineMarkup(list.filter(x=>x.pct!=null)))+'</div>'+
- box('Assessment-wise Performance','Assessment title is used as the topic label until chapter metadata is available',barsMarkup(list.slice(-12)))+
+ box('Assessment-wise Performance','Assessment title is used as the topic label until chapter metadata is available',topicBars(list.filter(x=>x.pct!=null)))+box('Attendance Trend','Weekly rates calculated only from teacher-submitted sessions',weekTrend())+
  box('Recent Results & Teacher Feedback','Original marks / maximum marks',marksTable(list)));
 }
 function attendance(){
@@ -177,10 +199,23 @@ async function profile(){
  renderShell('profile','My Student Profile','Your authorised school identity and personal details. Home address is private.','<div class="sp-intro"><div><span class="sp-kicker">STUDENT IDENTITY</span><h1>'+E(q.full_name)+'</h1><p class="sp-muted">'+E(classText())+' · '+E(sectionText())+'</p>'+badge('Roll '+(q.roll_number||'Unassigned'))+'</div><div class="sp-avatar">'+avatar+'</div></div><div class="sp-grid">'+box('My Details','School records are read-only',details)+box('Edit My Contact Details','Only approved personal fields can be updated',form)+'</div>');
 }
 async function run(id){
- if(!mine())return;const routes={'student-learning':learning,'student-calendar':calendar,'student-progress':progress,'student-attendance':attendance,'student-homework':homework,'student-planner':planner,'student-questions':questions,'student-portfolio':portfolio,'profile':profile};if(routes[id])await routes[id]();
+ if(!mine())return;const routes={'student-learning':learning,'student-calendar':calendar,'student-progress':progress,'student-attendance':attendance,'student-homework':homework,'student-planner':planner,'student-questions':questions,'student-portfolio':portfolio,'profile':profile,'notices':studentNotices,'notifications':studentNotifications};if(routes[id])await routes[id]();
 }
-async function render(){if(!mine())return;document.body.classList.add('noor-student-mode');root().innerHTML='<div class="sp-root">'+empty('Loading your private school records…')+'</div>';loading=true;try{await readAll();overview()}catch(e){root().innerHTML='<div class="sp-root">'+empty('Student portal could not load: '+(e.message||e))+'</div>'}finally{loading=false}}
-async function refresh(){if(loading||!mine())return;loading=true;try{await readAll();const id=document.querySelector('#workspace .view.active')?.id?.replace('view-','');if(id==='overview')overview();else await run(id);app().toast?.('Student data refreshed.','success')}catch(e){app().toast?.(e.message||'Refresh failed','error')}finally{loading=false}}
+
+function connectLive(){
+ if(!mine())return;
+ const current=u().id+':'+sid();if(channel&&activeStudent===current)return;
+ if(channel){db().removeChannel(channel);channel=null;}
+ activeStudent=current;
+ const tables=['noor_student_assignments','noor_student_submissions','school_notices','calendar_events','smart_notes','assessment_results','attendance_records'];
+ const c=db().channel('noor-student-live-'+u().id);
+ tables.forEach(table=>c.on('postgres_changes',{event:'*',schema:'public',table,filter:'school_id=eq.'+sid()},()=>{
+   if(document.visibilityState==='visible')refresh(true);
+ }));
+ channel=c.subscribe();
+}
+async function render(){if(!mine())return;document.body.classList.add('noor-student-mode');root().innerHTML='<div class="sp-root">'+empty('Loading your private school records…')+'</div>';loading=true;try{await readAll();overview();connectLive()}catch(e){root().innerHTML='<div class="sp-root">'+empty('Student portal could not load: '+(e.message||e))+'</div>'}finally{loading=false}}
+async function refresh(silent=false){if(loading||!mine())return;loading=true;try{await readAll();const id=document.querySelector('#workspace .view.active')?.id?.replace('view-','');if(id==='overview')overview();else await run(id);if(!silent)app().toast?.('Student data refreshed.','success')}catch(e){app().toast?.(e.message||'Refresh failed','error')}finally{loading=false}}
 const eventArea=()=>document.getElementById('workspace');
 eventArea()?.addEventListener('click',async ev=>{
  if(!mine())return;const t=ev.target.closest('[data-sp-nav],[data-sp-month],[data-sp-cal-mode],[data-sp-day],[data-sp-note-tab],[data-sp-goal],[data-sp-delete-goal],[data-sp-delete-portfolio],[data-sp-refresh]');if(!t)return;
